@@ -82,7 +82,7 @@ async function main() {
   const headLamp = new THREE.PointLight(0xfff4e0, 0, 14, 1.4); scene.add(headLamp);
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 3000);
-  camera.position.set(-22, 22, 34);
+  camera.position.set(57, 9.5, 32);
   const labelRenderer = new CSS2DRenderer({ element: $('labels') });
 
   // post: screen-space ambient occlusion (contact shadows in corners, under ledges, around furniture)
@@ -95,7 +95,7 @@ async function main() {
   let useAO = true;
 
   const orbit = new OrbitControls(camera, canvas);
-  orbit.target.set(13, 9, -8.6);
+  orbit.target.set(8, 12.5, -6.5);
   orbit.enableDamping = true; orbit.dampingFactor = 0.08;
   orbit.maxPolarAngle = Math.PI * 0.495;
   orbit.minDistance = 2; orbit.maxDistance = 220;
@@ -157,7 +157,7 @@ async function main() {
       if (prev === 'exterior' || prev === 'walk' || off.length() > 80) off.set(-14, 26, 22);
       orbit.target.copy(tgt); camera.position.copy(tgt).add(off);
     } else if (mode === 'exterior' && prev === 'walk') {
-      orbit.target.set(13, 9, -8.6); camera.position.set(-22, 22, 34);
+      orbit.target.set(8, 12.5, -6.5); camera.position.set(57, 9.5, 32);
     }
     renderRooms();
     drawMinimapBase();

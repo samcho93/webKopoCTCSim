@@ -526,7 +526,7 @@ export class Building {
     // road markings
     for (let x = -55; x < 85; x += 6) mb.get('lineWhite').box(x, -12.1, zg - 0.019, x + 3, -11.95, zg - 0.015, { bottom: false });
     // neighbours (simple massing, as in the street photos)
-    const nb = [[-22, 2, -8, 20, 24], [30.5, 24, 46, 40, 18], [-24, 26, -6, 44, 31], [6, 26, 22, 40, 15], [36, -2, 48, 18, 12]];
+    const nb = [[-22, 2, -8, 20, 24], [30.5, 24, 46, 40, 18], [-24, 26, -6, 44, 31], [6, 26, 22, 40, 15], [39, 6, 51, 22, 12]];
     for (const [x0, y0, x1, y1, h] of nb) {
       const k = (x0 + y0) % 2 ? 'neighbor2' : 'neighbor';
       mb.get(k).box(x0, y0, 0, x1, y1, h, { top: false, bottom: false });

@@ -6,6 +6,8 @@
   <title>KOPO CTC Sim — 분당융합기술교육원 3D 디지털 트윈</title>
   <meta name="description" content="한국폴리텍대학 분당융합기술교육원 건물(B1~8F) 3D 디지털 트윈 및 이동로봇/4족로봇 시뮬레이션 (LiDAR, SLAM, 경로계획, 엘리베이터/계단 층간 이동, rosbridge)" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='14' y='6' width='36' height='52' rx='3' fill='%231d2a50'/><g fill='%23f2b632'><rect x='20' y='12' width='8' height='6'/><rect x='36' y='12' width='8' height='6'/><rect x='20' y='24' width='8' height='6'/><rect x='36' y='24' width='8' height='6'/><rect x='20' y='36' width='8' height='6'/><rect x='36' y='36' width='8' height='6'/></g><rect x='27' y='46' width='10' height='12' fill='%23fff'/></svg>" />
+  <meta property="og:title" content="KOPO CTC Sim — 분당융합기술교육원 3D 디지털 트윈" />
+  <meta property="og:image" content="https://samcho93.github.io/webKopoCTCSim/og.jpg" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
@@ -100,7 +102,7 @@
       <canvas id="minimap" width="620" height="420"></canvas>
     </div>
     <div id="pipLabel" class="hidden">로봇 카메라</div>
-    <div id="loading"><div class="spinner"></div><p>도면 데이터로 건물 생성 중…</p></div>
+    <div id="loading" style="background-image: linear-gradient(rgba(15,20,32,.15), rgba(15,20,32,.55)), url(poster.webp)"><div class="loadBox"><div class="spinner"></div><p>도면 데이터로 건물 생성 중…</p></div></div>
   </div>
   <script type="module" src="/src/main.js"></script>
 </body>
