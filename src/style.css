@@ -81,3 +81,4 @@ footer a { color: var(--acc); }
   #hud { display: none; }
   #walkHelp { white-space: normal; width: calc(100% - 32px); }
 }
+code { font-size: 11px; background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; }

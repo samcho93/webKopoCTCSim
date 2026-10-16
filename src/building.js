@@ -574,26 +574,68 @@ export class Building {
 
   buildSignage() {
     const g = new THREE.Group(); g.name = 'signage'; this.root.add(g);
-    const plane = (tex, w, h, pos, rotY, emissive = 0) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.4, emissive: emissive ? 0xffffff : 0, emissiveMap: emissive ? tex : null, emissiveIntensity: emissive }));
-      m.position.copy(toWorld(...pos)); m.rotation.y = rotY; g.add(m); return m;
+    this.signs = [];
+    // side: facade the sign is fixed to (S, E, W). u = position along that facade, z = centre height.
+    const plane = (tex, w, h, side, u, z, { emissive = 0, search = null, depth = 0.012 } = {}) => {
+      const geo = depth > 0.02 ? new THREE.BoxGeometry(w, h, depth) : new THREE.PlaneGeometry(w, h);
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, transparent: !(depth > 0.02), roughness: 0.45, emissive: emissive ? 0xffffff : 0, emissiveMap: emissive ? tex : null, emissiveIntensity: emissive }));
+      m.rotation.y = { S: 0, E: Math.PI / 2, W: -Math.PI / 2 }[side];
+      m.castShadow = depth > 0.02;
+      g.add(m);
+      this.signs.push({ mesh: m, w, h, side, u, z, search, depth });
+      return m;
     };
     const top = this.byId['8F'];
-    // name signs near the parapet (south and east facades)
     const name = sign('한국폴리텍대학 분당융합기술교육원', { w: 2048, h: 192, font: 'bold 120px "Malgun Gothic", "Noto Sans KR", sans-serif' });
-    plane(name, 14, 1.3, [8.0, -0.32, top.elevation - 1.2], 0);
-    plane(name, 14, 1.3, [27.42, 10.0, top.elevation - 1.2], Math.PI / 2);
-    // vertical sign at the entrance column (as on the street photos)
+    plane(name, 14, 1.3, 'S', 8.0, top.elevation - 1.2);
+    plane(name, 14, 1.3, 'E', 10.0, top.elevation - 1.2);
     const vert = sign('한국폴리텍대학분당융합기술교육원', { w: 256, h: 2600, fg: '#ffffff', bg: '#1d2a50', font: 'bold 150px "Malgun Gothic", "Noto Sans KR", sans-serif', vertical: true });
-    plane(vert, 0.6, 6, [-0.35, 2.0, 4.0], -Math.PI / 2);
-    // yellow recruitment banner above the 1F parking entrance
+    plane(vert, 0.6, 6, 'W', 2.0, 4.0, { depth: 0.08 });
+    // yellow recruitment banner on the 1F fascia (searches for a continuous wall stretch)
     const banner = sign('교육비 전액 정부지원 · 교육수당 지급\nAI·SW 개발자 / 품질관리전문가(바이오·이화학) 취업실무 교육 모집', { w: 2048, h: 256, bg: '#f2b632', fg: '#1d2a50', font: 'bold 64px "Malgun Gothic", "Noto Sans KR", sans-serif' });
-    plane(banner, 9.0, 1.1, [22.4, -0.42, 3.8], 0);
-    // lobby & parking signs
+    plane(banner, 8.0, 1.0, 'S', 21.5, 3.75, { search: [9, 24], depth: 0.04 });
     const p = sign('P', { w: 256, h: 256, bg: '#1d2a50', fg: '#ffffff', font: 'bold 200px sans-serif' });
-    plane(p, 0.8, 0.8, [27.45, 3.5, 3.2], Math.PI / 2, 0.4);
+    plane(p, 0.8, 0.8, 'E', 3.5, 3.2, { emissive: 0.4, depth: 0.06 });
     const lobby = sign('한국폴리텍대학 분당융합기술교육원', { w: 1024, h: 128, fg: '#ffffff', font: 'bold 64px "Malgun Gothic", "Noto Sans KR", sans-serif' });
-    plane(lobby, 4.5, 0.55, [6.0, 4.0, 2.2], 0, 0.6);
+    plane(lobby, 4.5, 0.55, 'S', 6.0, 3.3, { emissive: 0.6 });
+  }
+
+  /** Snap every sign flush onto the facade it belongs to (ray casts against the built geometry). */
+  mountSigns(world) {
+    const N = { S: [0, -1], E: [1, 0], W: [-1, 0] };
+    const o = new THREE.Vector3(), d = new THREE.Vector3();
+    for (const sg of this.signs) {
+      const [nx, ny] = N[sg.side];
+      const tx = -ny, ty = nx; // along-facade direction
+      const probe = (u) => {
+        const hits = [];
+        for (const du of [-0.48, -0.25, 0, 0.25, 0.48]) for (const dz of [-0.4, 0, 0.4]) {
+          const uu = u + du * sg.w, z = sg.z + dz * sg.h;
+          const bx = sg.side === 'S' ? uu : nx > 0 ? 28.6 : -1.3, by = sg.side === 'S' ? -1.3 : uu;
+          o.copy(toWorld(bx, by, z)); d.set(-nx, 0, ny); // inward (three: Z = -y)
+          const r = world.raycast(o, d, 3);
+          if (!Number.isFinite(r)) return null;
+          hits.push(sg.side === 'S' ? by + r : nx > 0 ? bx - r : bx + r);
+        }
+        return hits;
+      };
+      let best = null;
+      const cands = sg.search ? [] : [sg.u];
+      if (sg.search) for (let u = sg.search[0]; u <= sg.search[1]; u += 0.25) cands.push(u);
+      for (const u of cands) {
+        const h = probe(u); if (!h) continue;
+        const spread = Math.max(...h) - Math.min(...h);
+        if (spread > 0.12) continue;
+        const score = Math.abs(u - sg.u);
+        if (!best || score < best.score) best = { u, score, face: sg.side === 'S' ? Math.min(...h) : nx > 0 ? Math.max(...h) : Math.min(...h) };
+      }
+      if (!best) { const h = probe(sg.u); best = { u: sg.u, face: h ? (sg.side === 'S' ? Math.min(...h) : nx > 0 ? Math.max(...h) : Math.min(...h)) : (sg.side === 'S' ? 0 : nx > 0 ? 27.1 : 0) }; }
+      const off = sg.depth / 2 + 0.006;
+      const x = sg.side === 'S' ? best.u : best.face + nx * off;
+      const y = sg.side === 'S' ? best.face - off : best.u;
+      sg.mesh.position.copy(toWorld(x, y, sg.z));
+      void tx; void ty;
+    }
   }
 
   /** Make cutaway / single-level / full views. */

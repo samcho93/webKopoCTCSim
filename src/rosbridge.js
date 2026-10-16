@@ -83,14 +83,14 @@ export class RosBridge {
     if (!this.connected) return;
     const ns = `/${r.id}`, s = r.lastScan;
     this.publish(`${ns}/scan`, 'sensor_msgs/LaserScan', {
-      header: this.header(`${r.id}/laser`), angle_min: s.angleMin, angle_max: s.angleMin + s.angleInc * (s.ranges.length - 1),
+      header: this.header(`${r.id}/${r.P.laserFrame}`), angle_min: s.angleMin, angle_max: s.angleMin + s.angleInc * (s.ranges.length - 1),
       angle_increment: s.angleInc, time_increment: 0, scan_time: 1 / r.scanRate, range_min: 0.1, range_max: s.rangeMax,
       ranges: Array.from(s.ranges, (v) => (Number.isFinite(v) ? +v.toFixed(4) : s.rangeMax + 1)), intensities: [],
     });
     const q = (yaw) => ({ x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) });
     const o = r.odom;
     this.publish(`${ns}/odom`, 'nav_msgs/Odometry', {
-      header: this.header(`${r.id}/odom`), child_frame_id: `${r.id}/base_link`,
+      header: this.header(`${r.id}/odom`), child_frame_id: `${r.id}/${r.P.baseFrame}`,
       pose: { pose: { position: { x: o.x, y: o.y, z: 0 }, orientation: q(o.yaw) }, covariance: new Array(36).fill(0) },
       twist: { twist: { linear: { x: r.speed?.v || 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: r.speed?.w || 0 } }, covariance: new Array(36).fill(0) },
     });
@@ -101,9 +101,11 @@ export class RosBridge {
     const tf = (parent, child, x, y, z, yaw) => ({ header: this.header(parent), child_frame_id: child, transform: { translation: { x, y, z }, rotation: q(yaw) } });
     this.publish('/tf', 'tf2_msgs/TFMessage', { transforms: [
       tf(`map_${r.level.id}`, `${r.id}/odom`, tx, ty, r.level.elevation, dyaw),
-      tf(`${r.id}/odom`, `${r.id}/base_link`, o.x, o.y, 0, o.yaw),
-      tf(`${r.id}/base_link`, `${r.id}/laser`, 0.08, 0, r.lidar.height, 0),
+      tf(`${r.id}/odom`, `${r.id}/${r.P.baseFrame}`, o.x, o.y, r.P.baseFrame === 'base' ? r.P.hipHeight : 0, o.yaw),
     ] });
+    // joints of the robot's own URDF -> robot_state_publisher (frame_prefix:=<id>/) draws the model in RViz
+    const js = r.jointState;
+    if (js && js.name.length) this.publish(`${ns}/joint_states`, 'sensor_msgs/JointState', { header: this.header(''), name: js.name, position: js.position, velocity: js.velocity || [], effort: [] });
     const p = r.body.pos;
     this.publish(`${ns}/pose_truth`, 'geometry_msgs/PoseStamped', { header: this.header('world'), pose: { position: { x: p.x, y: p.y, z: p.z }, orientation: q(r.yaw) } });
     const now = performance.now();

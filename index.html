@@ -39,8 +39,8 @@
       <section>
         <h2>로봇</h2>
         <div class="row">
-          <button id="addAmr">＋ AMR</button>
-          <button id="addQuad">＋ 4족 로봇</button>
+          <button id="addAmr" title="이동로봇 (차동구동) — studyTIKI URDF">＋ TIKI-mini</button>
+          <button id="addQuad" title="4족 보행 로봇 — Unitree Go2 URDF">＋ Go2</button>
         </div>
         <div class="row"><select id="robotSel"></select><button id="delRobot" title="삭제">✕</button></div>
         <div class="row">
@@ -65,7 +65,11 @@
         <p class="hint">텔레옵: <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd> (단면/외관 보기)</p>
       </section>
       <section>
-        <h2>ROS 연동 (rosbridge)</h2>
+        <h2>ROS 2 연동</h2>
+        <p class="hint">TIKI-mini: <code>ros2 launch tiki_ros sim_bridge.launch.py</code> 실행 후 연결 (studyTIKI 드라이버 그대로)</p>
+        <div class="row"><input id="tikiUrl" value="ws://127.0.0.1:8765" /><button id="tikiConnect">TIKI 드라이버 연결</button></div>
+        <div class="row"><span id="tikiStatus" class="status">연결 안 됨</span></div>
+        <p class="hint">Go2 · 공통: rosbridge (<code>/go2_N/cmd_vel</code>, <code>joint_states</code>, <code>scan</code>, <code>odom</code>, <code>tf</code>)</p>
         <div class="row"><input id="rosUrl" value="ws://localhost:9090" /><button id="rosConnect">연결</button></div>
         <div class="row"><label><input type="checkbox" id="ros2" checked /> ROS 2 메시지 형식</label><span id="rosStatus" class="status">미연결</span></div>
       </section>
@@ -86,8 +90,8 @@
       <div id="hudPos"></div>
     </div>
     <div id="walkHelp" class="hidden">
-      <b>1인칭 워크</b> 화면 클릭 → 마우스 시점 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 · <kbd>Shift</kbd> 달리기 ·
-      <kbd>E</kbd> 엘리베이터 호출/탑승 · 탑승 중 <kbd>B</kbd>/<kbd>1</kbd>–<kbd>8</kbd> 층 선택 · <kbd>Esc</kbd> 해제
+      <b>1인칭 워크</b> 클릭 → 그 위치로 이동 · 드래그 → 둘러보기 · <kbd>←</kbd><kbd>→</kbd> 회전 · <kbd>↑</kbd><kbd>↓</kbd> 위/아래 보기 ·
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 직접 이동 · <kbd>E</kbd> 엘리베이터 호출 · 탑승 중 <kbd>B</kbd>/<kbd>1</kbd>–<kbd>8</kbd> 층 선택
     </div>
     <div id="toast"></div>
     <div id="minimapWrap">

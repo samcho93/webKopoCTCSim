@@ -11,11 +11,11 @@
 | 구분 | 내용 |
 |---|---|
 | 건물 모델 | B1–8F 9개 층: 구조벽·기둥·코어, 칸막이/유리벽, 고정가구(책상·실험대·수납장), 커튼월(SE 곡면 유리 포함), 창호, 슬래브, 천장(텍스 + LED 조명), 계단 2개소(실제 단 높이 디딤판 + 난간), 엘리베이터 2대(승강로·카·승강장 도어), 옥상정원, 외부 가로(보도·가로수·인접 건물), 사인물 |
-| 보기 | 외관 / 층 단면(선택 층 이하 표시) / 단일 층 / 1인칭 워크(WASD, 충돌, 계단 오르내리기, 엘리베이터 탑승) · 실명 라벨 · 공간 목록 이동 |
-| 로봇 | 차동구동 AMR(2D LiDAR 360빔) · 4족 보행 로봇(16채널 3D LiDAR, 계단 보행) · 텔레옵(IJKL) · 클릭/실명 목적지 지정 · 로봇 시점 카메라 · 추적 카메라 |
+| 보기 | 외관 / 층 단면(선택 층 이하 표시) / 단일 층 / 1인칭 워크(클릭한 곳으로 이동, 드래그·방향키 회전, 충돌, 계단, 엘리베이터 탑승) · 실명 라벨 · 공간 목록 이동 |
+| 로봇 | **TIKI-mini** 이동로봇(차동구동, RPLIDAR, 카메라 · 엘리베이터 이용) · **Unitree Go2** 4족 보행 로봇(12 DoF, L1 LiDAR · 계단 보행) — 두 로봇 모두 각 저장소의 **URDF + 메시**를 그대로 로드 · 텔레옵(IJKL) · 클릭/실명 목적지 지정 · 로봇 시점 카메라 · 추적 카메라 |
 | 내비게이션 | 층별 점유격자 + 장애물 팽창 + A* · **다층 경로**: AMR은 엘리베이터 호출→탑승→목적층 하차, 4족 로봇은 계단 이용 |
 | SLAM | 오도메트리 노이즈 + 상관 스캔매칭 + log-odds 점유격자 (층별 맵), 추정 오차 표시, PGM/YAML 내보내기 |
-| ROS 연동 | rosbridge(v2 JSON) 클라이언트 내장: `scan`, `odom`, `tf`, `map`, `pose_truth` 발행 / `cmd_vel`, `goal_pose`, `/sim/elevator` 구독 (ROS 2/ROS 1 형식 선택) |
+| ROS 2 연동 | **TIKI-mini**: studyTIKI의 `tiki_ros` 드라이버(backend=websim)가 그대로 이 건물 속 TIKI를 구동 (`/cmd_vel`, `/odom`, `/scan`, `/imu/data`, `/image_raw`, `/joint_states`, TF) · **Go2/공통**: rosbridge v2 — `scan`, `odom`, `tf`, `joint_states`(URDF 관절명), `map`, `pose_truth` 발행 / `cmd_vel`, `goal_pose`, `/sim/elevator` 구독 |
 | 내보내기 | 건물 GLB(Gazebo/Isaac Sim/Blender 등), `building.json`, 층별 정답 맵(ROS map_server PGM+YAML), SLAM 맵 |
 | 시뮬레이션 | 고정 스텝(60 Hz) 물리, 배속(×0~×16), 백그라운드 탭에서도 계속 실행, `window.sim` 스크립팅 API |
 
@@ -50,22 +50,48 @@ python tools/extract_floorplans.py "<평면도.pdf>" public/data
 * three.js: `X = x`, `Y = z`, `Z = -y`.
 * ROS(REP-103) 메시지는 평면 좌표 그대로 사용하며, 층별 맵 프레임은 `map_<층ID>` (예: `map_3F`) 입니다.
 
-## ROS 연동 예
+## 로봇 모델 (URDF)
+
+| 시뮬 로봇 | 출처 | 파일 |
+|---|---|---|
+| TIKI-mini (이동로봇) | [samcho93/studyTIKI](https://github.com/samcho93/studyTIKI) `ros2_ws/src/tiki_description` | `public/robots/tiki_mini/tiki_mini.urdf` + CAD STL |
+| Go2 (4족) | [samcho93/studyGo2](https://github.com/samcho93/studyGo2) `assets/urdf/go2` (unitree_ros go2_description, BSD-3) | `public/robots/go2/go2_description.urdf` + GLB |
+
+치수·속도·센서 위치는 위 패키지 값(바퀴 반지름 0.0325 m, 간격 0.1924 m, 175 rpm, `laser_joint` 등 / Go2 관절 길이 0.213 m)을 `src/robots.js` PRESETS에 옮겼습니다.
+TIKI 바퀴 관절, Go2 12개 관절(`FL_hip_joint` …)은 시뮬레이션 중 URDF 관절값으로 구동되어 `joint_states`로 그대로 발행됩니다.
+
+## ROS 2 연동
+
+### TIKI-mini — studyTIKI 드라이버 그대로 사용
 
 ```bash
-# ROS 2 쪽
+# studyTIKI의 ros2_ws를 빌드한 PC에서 (드라이버가 ws://127.0.0.1:8765 서버를 엽니다)
+ros2 launch tiki_ros sim_bridge.launch.py
+# 웹 화면: ROS 2 연동 → [TIKI 드라이버 연결]  (선택된 TIKI-mini가 연결됨)
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.15}, angular: {z: 0.3}}"
+ros2 launch tiki_ros slam.launch.py      # slam_toolbox / Nav2도 동일하게 동작
+```
+
+`tiki-sim` 파이썬 패키지(`python -m tiki.run my_code.py`)도 같은 방법으로 이 건물 속 TIKI를 제어합니다
+(프로토콜: studyTIKI `docs/PROTOCOL.md` — `call`·`lidar`·`capture`·`status`·`reset`). 정지 버튼은 `estop`을 보내 드라이버를 멈춥니다.
+
+### Go2 · 공통 — rosbridge
+
+```bash
 ros2 launch rosbridge_server rosbridge_websocket_launch.xml
-# 웹 화면: ROS 연동 → ws://localhost:9090 연결
-ros2 topic echo /amr_1/scan
-ros2 topic pub /amr_1/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}, angular: {z: 0.2}}"
-ros2 topic pub --once /amr_1/goal_pose geometry_msgs/msg/PoseStamped "{header: {frame_id: map_3F}, pose: {position: {x: 24.3, y: 3.4}}}"
+# 웹 화면: ws://localhost:9090 연결
+ros2 run robot_state_publisher robot_state_publisher --ros-args   -p robot_description:="$(cat go2_description.urdf)" -p frame_prefix:=go2_2/ -r joint_states:=/go2_2/joint_states
+ros2 topic pub /go2_2/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3}, angular: {z: 0.2}}"
+ros2 topic pub --once /go2_2/goal_pose geometry_msgs/msg/PoseStamped "{header: {frame_id: map_3F}, pose: {position: {x: 24.3, y: 3.4}}}"
 ros2 topic pub --once /sim/elevator std_msgs/msg/String "{data: 'EV1:5F'}"
 ```
+
+로봇 ID(`tiki_1`, `go2_2` …)가 네임스페이스·TF 접두어입니다. TF: `map_<층>` → `<id>/odom` → `<id>/base`(Go2) 또는 `<id>/base_footprint`(TIKI).
 
 ## 스크립팅 API (`window.sim`)
 
 ```js
-const r = sim.spawn('quadruped', '1F', 9.5, 8.0, 0);   // 로봇 생성 (종류, 층, x, y, yaw)
+const r = sim.spawn('go2', '1F', 9.5, 8.0, 0);         // 'go2' | 'tiki' (종류, 층, x, y, yaw)
 r.goTo('3F', 11.9, 13.5);                               // 다층 경로 주행 (계단 이용)
 sim.callElevator('EV2', '5F');
 sim.setMode('cutaway', '3F');                            // exterior | cutaway | single | walk
@@ -83,7 +109,10 @@ src/physics.js                BVH 충돌 월드, 캐릭터/로봇 바디(경사�
 src/sensors.js                2D/3D LiDAR (BVH 레이캐스트)
 src/slam.js                   스캔매칭 + 점유격자 SLAM, PGM/OccupancyGrid 출력
 src/nav.js                    점유격자 A*, 팽창, 다층 라우터(엘리베이터/계단)
-src/robots.js                 AMR / 4족 로봇 모델·주행·태스크 실행기
+src/robots.js                 TIKI-mini / Go2 사양·주행·태스크 실행기
+src/urdfModels.js             URDF 로더 (STL/GLB), Go2 다리 IK
+src/tikiLink.js               studyTIKI 시뮬레이터 프로토콜 (tiki_ros websim 드라이버 연결)
+public/robots/                로봇 URDF 패키지 (tiki_mini, go2)
 src/rosbridge.js              rosbridge v2 클라이언트
 src/main.js                   씬·조명·UI·미니맵·로봇 카메라·내보내기
 ```

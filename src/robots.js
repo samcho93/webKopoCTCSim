@@ -1,6 +1,8 @@
 // Mobile robots: differential-drive AMR and a quadruped. Both share the
 // kinematic Body, sensors, SLAM and a task executor for multi-level routes.
 import * as THREE from 'three';
+import { makeStudyGO2, makeTikiMini, animateLegs } from './robotModels.js';
+import { instantiate, go2LegIK, GO2_LEGS, GO2_JOINTS } from './urdfModels.js';
 import { Body } from './physics.js';
 import { Lidar2D, Lidar3D, gauss } from './sensors.js';
 import { GridSlam, wrap } from './slam.js';
@@ -8,16 +10,40 @@ import { toWorld } from './geo.js';
 
 let SEQ = 0;
 
+// Robot specs, taken from the robots' own packages (edit there first, then here):
+//   TIKI-mini : studyTIKI python/tiki/data/robot.json + tiki_ros/config/tiki.yaml
+//   Go2       : unitree_ros go2_description (studyGo2 assets/urdf/go2), studyGo2 sim/protocol.js limits
+const RPM = (2 * Math.PI) / 60;
 const PRESETS = {
-  amr: { label: 'AMR (차동구동)', radius: 0.27, height: 0.45, step: 0.03, vmax: 0.9, wmax: 1.6, lidar: '2d', lidarH: 0.32, nav: 'elevator', color: 0x2f6fd6 },
-  quadruped: { label: '4족 보행 로봇', radius: 0.28, height: 0.6, step: 0.3, vmax: 1.0, wmax: 1.8, lidar: '3d', lidarH: 0.42, nav: 'stairs', color: 0xf0a020 },
+  // TIKI-mini: differential-drive mobile robot (RPLIDAR on the rear mount, front camera). Uses elevators.
+  amr: {
+    label: 'TIKI-mini', idPrefix: 'tiki', type: '이동로봇 (차동구동)', model: 'tiki',
+    baseFrame: 'base_footprint', laserFrame: 'laser_link', laserX: -0.1025,
+    wheelRadius: 0.0325, wheelSeparation: 0.1924, maxRpm: 175, tauPid: 0.12,
+    radius: 0.14, height: 0.16, step: 0.02, vmax: 0.5, wmax: 3.0,
+    lidar: '2d', lidarH: 0.134, lidarBeams: 360, lidarRange: 12,
+    camera: { x: 0.06, z: 0.095, pitch: 0.1396, hfov: 69.6 },
+    nav: 'elevator', color: 0xf5b80a,
+  },
+  // Unitree Go2: 12-DoF quadruped (L1 LiDAR under the head). Uses the stairs.
+  quadruped: {
+    label: 'Go2', idPrefix: 'go2', type: '4족 보행 로봇', model: 'go2',
+    baseFrame: 'base', laserFrame: 'base', laserX: 0.289, // ring of the L1 published in base (the URDF radar frame is tilted)
+    hipHeight: 0.32, thigh: 0.213, calf: 0.213, hipX: 0.1934, hipY: 0.0465 + 0.0955,
+    radius: 0.28, height: 0.42, step: 0.18, vmax: 0.8, wmax: 1.2,
+    lidar: '3d', lidarH: 0.28, lidarChannels: 16, lidarRange: 20,
+    camera: { x: 0.33, z: 0.36, pitch: 0.1, hfov: 70 },
+    nav: 'stairs', color: 0x9aa3ad,
+  },
 };
+const ALIAS = { tiki: 'amr', 'tiki-mini': 'amr', tikimini: 'amr', go2: 'quadruped' };
 
 export class Robot {
   constructor(sim, kind, x, y, z, yaw = 0) {
+    kind = ALIAS[String(kind).toLowerCase()] || kind;
     const P = PRESETS[kind];
     this.sim = sim; this.kind = kind; this.P = P;
-    this.id = `${kind}_${++SEQ}`;
+    this.id = `${P.idPrefix}_${++SEQ}`;
     this.name = `${P.label} #${SEQ}`;
     this.body = new Body(sim.world, { radius: P.radius, height: P.height, step: P.step });
     this.body.place(x, y, z);
@@ -29,8 +55,8 @@ export class Robot {
     this.odom = { x: this.body.pos.x, y: this.body.pos.y, yaw };   // noisy odometry frame
     this.odomNoise = 0.02;
     this.lidar = P.lidar === '2d'
-      ? new Lidar2D(sim.world, { beams: 360, height: P.lidarH, rangeMax: 16 })
-      : new Lidar3D(sim.world, { channels: 16, azimuth: 360, height: P.lidarH, rangeMax: 25 });
+      ? new Lidar2D(sim.world, { beams: P.lidarBeams, height: P.lidarH, rangeMax: P.lidarRange })
+      : new Lidar3D(sim.world, { channels: P.lidarChannels, azimuth: 360, height: P.lidarH, rangeMax: P.lidarRange });
     this.scanRate = P.lidar === '2d' ? 10 : 5;
     this.scanT = 0;
     this.slam = new GridSlam(sim.building.meta);
@@ -40,9 +66,16 @@ export class Robot {
     this.lastScan = null;
     this.path = [];
     this.gait = 0;
-    this.mesh = kind === 'amr' ? makeAMR(P) : makeQuadruped(P);
+    // visuals: the robot's own URDF (falls back to a procedural stand-in if it failed to load)
+    const inst = instantiate(P.model);
+    if (inst) { this.mesh = inst.group; this.urdf = inst.urdf; }
+    else this.mesh = kind === 'amr' ? makeStudyGO2({ ...P, length: 0.22, width: 0.22, bodyHeight: 0.06, wheelRadius: 0.0325, wheelTrack: 0.19, accent: 0x222222 }) : makeTikiMini({ ...P, length: 0.6, width: 0.3, bodyHeight: 0.11, accent: 0xb0b4b8 });
+    // wheel state for the TIKI driver protocol (PID mode: commands are wheel rpm)
+    this.wheel = { mode: 0, cmd: [0, 0], wl: 0, wr: 0, al: 0, ar: 0 };
+    this.link = null;          // set by TikiLink while the ROS 2 / Python driver is connected
+    this.jointState = { name: [], position: [] };
     sim.scene.add(this.mesh);
-    this.scanViz = makeScanViz(P.lidar === '2d' ? 360 : 16 * 360, P.color);
+    this.scanViz = makeScanViz(P.lidar === '2d' ? P.lidarBeams : P.lidarChannels * 360, P.color);
     sim.scene.add(this.scanViz);
     this.sync();
   }
@@ -68,8 +101,26 @@ export class Robot {
   update(dt) {
     this.runTasks(dt);
     if (this.cmdTimeout > 0) this.cmdTimeout -= dt; else if (!this.tasks.length) { this.cmd.v = 0; this.cmd.w = 0; }
-    const v = THREE.MathUtils.clamp(this.cmd.v, -this.P.vmax, this.P.vmax);
-    const w = THREE.MathUtils.clamp(this.cmd.w, -this.P.wmax, this.P.wmax);
+    let v = THREE.MathUtils.clamp(this.cmd.v, -this.P.vmax, this.P.vmax);
+    let w = THREE.MathUtils.clamp(this.cmd.w, -this.P.wmax, this.P.wmax);
+    if (this.kind === 'amr') {
+      const W = this.wheel, P = this.P;
+      let tl, tr;
+      if (this.link) {
+        // external driver: wheel rpm targets (PID mode), first-order motor response
+        const on = W.mode === 2;
+        tl = on ? THREE.MathUtils.clamp(W.cmd[0], -P.maxRpm, P.maxRpm) * RPM : 0;
+        tr = on ? THREE.MathUtils.clamp(W.cmd[1], -P.maxRpm, P.maxRpm) * RPM : 0;
+      } else {
+        tl = (v - (w * P.wheelSeparation) / 2) / P.wheelRadius;
+        tr = (v + (w * P.wheelSeparation) / 2) / P.wheelRadius;
+      }
+      const k = Math.min(1, dt / P.tauPid);
+      W.wl += (tl - W.wl) * k; W.wr += (tr - W.wr) * k;
+      W.al += W.wl * dt; W.ar += W.wr * dt;
+      v = ((W.wl + W.wr) / 2) * P.wheelRadius;
+      w = ((W.wr - W.wl) * P.wheelRadius) / P.wheelSeparation;
+    }
     const p = this.body.pos;
     const x0 = p.x, y0 = p.y, yaw0 = this.yaw;
     this.yaw = wrap(this.yaw + w * dt);
@@ -90,7 +141,7 @@ export class Robot {
 
     this.scanT += dt;
     if (this.scanT >= 1 / this.scanRate) { this.scanT = 0; this.doScan(); }
-    this.gait += dist * 6 + Math.abs(dyaw) * 2;
+    this.gait += dist * (this.kind === 'quadruped' ? 22 : 6) + Math.abs(dyaw) * (this.kind === 'quadruped' ? 5 : 2);
     this.sync();
   }
 
@@ -187,8 +238,27 @@ export class Robot {
     const p = this.body.pos;
     this.mesh.position.copy(toWorld(p.x, p.y, p.z));
     this.mesh.rotation.y = this.yaw;
-    if (this.kind === 'quadruped') animateLegs(this.mesh, this.gait, Math.abs(this.cmd.v) + Math.abs(this.cmd.w) > 0.02);
-    else this.mesh.userData.wheels?.forEach((w) => (w.rotation.z = -this.gait * 0.5));
+    const moving = Math.abs(this.speed?.v || 0) + Math.abs(this.speed?.w || 0) > 0.02;
+    if (this.urdf && this.kind === 'amr') {
+      this.urdf.setJointValue('left_wheel_joint', this.wheel.al);
+      this.urdf.setJointValue('right_wheel_joint', this.wheel.ar);
+      this.jointState = { name: ['left_wheel_joint', 'right_wheel_joint'], position: [this.wheel.al, this.wheel.ar], velocity: [this.wheel.wl, this.wheel.wr] };
+    } else if (this.urdf) {
+      // Go2 trot: diagonal pairs in phase, feet follow an ellipse under each hip (2-link IK)
+      const P = this.P, name = [], position = [];
+      this.urdf.position.z = 0; // base frame is the URDF root
+      this.mesh.children[0].position.y = P.hipHeight + (moving ? Math.abs(Math.sin(this.gait)) * 0.008 : 0);
+      for (const leg of GO2_LEGS) {
+        const ph = this.gait + (leg === 'FL' || leg === 'RR' ? 0 : Math.PI);
+        const fx = moving ? Math.sin(ph) * 0.06 : 0;
+        const fz = -P.hipHeight + 0.022 + (moving ? Math.max(0, Math.cos(ph)) * 0.06 : 0);
+        const [th, ca] = go2LegIK(fx, fz, P.thigh, P.calf);
+        const vals = [0, th, ca];
+        ['hip', 'thigh', 'calf'].forEach((j, k) => { const n = `${leg}_${j}_joint`; this.urdf.setJointValue(n, vals[k]); name.push(n); position.push(vals[k]); });
+      }
+      this.jointState = { name, position };
+    } else if (this.kind === 'quadruped') animateLegs(this.mesh, this.gait, moving, { ...this.P, hipHeight: 0.3, thigh: 0.18, calf: 0.18 });
+    else this.mesh.userData.wheels?.forEach((wh) => (wh.rotation.z = -this.gait / 6 / 0.0325));
   }
 
   dispose() {
@@ -207,65 +277,5 @@ function makeScanViz(n, color) {
   return pts;
 }
 
-// Model: local frame X forward (robot x), Y up, Z = -robot y (left).
-function makeAMR(P) {
-  const g = new THREE.Group();
-  const body = new THREE.MeshStandardMaterial({ color: 0xe9ecef, roughness: 0.4, metalness: 0.1 });
-  const accent = new THREE.MeshStandardMaterial({ color: P.color, roughness: 0.4 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x222428, roughness: 0.6 });
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(P.radius, P.radius, 0.22, 40), body);
-  base.position.y = 0.17; g.add(base);
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(P.radius + 0.005, P.radius + 0.005, 0.05, 40), accent);
-  band.position.y = 0.1; g.add(band);
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(P.radius * 0.95, P.radius, 0.04, 40), dark);
-  top.position.y = 0.3; g.add(top);
-  const lidar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 20), dark);
-  lidar.position.set(0.08, P.lidarH, 0); g.add(lidar);
-  const front = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.25), new THREE.MeshStandardMaterial({ color: 0x1ec8ff, emissive: 0x1ec8ff, emissiveIntensity: 1.5 }));
-  front.position.set(P.radius - 0.005, 0.2, 0); g.add(front);
-  const wheels = [];
-  for (const s of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 24), dark);
-    w.rotation.x = Math.PI / 2; w.position.set(0, 0.075, s * (P.radius - 0.03));
-    const hub = new THREE.Group(); hub.add(w); g.add(hub); wheels.push(w);
-  }
-  g.userData.wheels = wheels;
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return g;
-}
-
-function makeQuadruped(P) {
-  const g = new THREE.Group();
-  const shell = new THREE.MeshStandardMaterial({ color: P.color, roughness: 0.45, metalness: 0.2 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.5, metalness: 0.3 });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.14, 0.26), shell);
-  torso.position.y = 0.44; g.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), dark);
-  head.position.set(0.34, 0.45, 0); g.add(head);
-  const lidar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.07, 20), dark);
-  lidar.position.set(0.1, P.lidarH + 0.02, 0); g.add(lidar);
-  const legs = [];
-  for (const [fx, sz] of [[0.25, 0.15], [0.25, -0.15], [-0.25, 0.15], [-0.25, -0.15]]) {
-    const hip = new THREE.Group(); hip.position.set(fx, 0.42, sz); g.add(hip);
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.2, 0.06), dark); thigh.position.y = -0.1; hip.add(thigh);
-    const knee = new THREE.Group(); knee.position.y = -0.2; hip.add(knee);
-    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), shell); shin.position.y = -0.1; knee.add(shin);
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), dark); foot.position.y = -0.2; knee.add(foot);
-    legs.push({ hip, knee, phase: (fx > 0) === (sz > 0) ? 0 : Math.PI });
-  }
-  g.userData.legs = legs;
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return g;
-}
-
-function animateLegs(g, t, moving) {
-  for (const L of g.userData.legs) {
-    const ph = t + L.phase;
-    const sw = moving ? Math.sin(ph) * 0.45 : 0;
-    const lift = moving ? Math.max(0, Math.cos(ph)) * 0.5 : 0;
-    L.hip.rotation.z = 0.55 + sw;
-    L.knee.rotation.z = -1.1 - lift;
-  }
-}
-
-export { PRESETS };
+export { PRESETS, RPM };
+void GO2_JOINTS;

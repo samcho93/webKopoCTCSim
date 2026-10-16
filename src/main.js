@@ -12,6 +12,8 @@ import { Elevator } from './elevator.js';
 import { LevelGrid, Router } from './nav.js';
 import { Robot } from './robots.js';
 import { RosBridge } from './rosbridge.js';
+import { TikiLink } from './tikiLink.js';
+import { loadRobotModels } from './urdfModels.js';
 import { toWorld } from './geo.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -101,6 +103,7 @@ async function main() {
   // ------------------------------------------------------------ building + world
   const building = new Building(data, scene, env);
   const world = new World(building);
+  building.mountSigns(world);
   const elevators = data.elevators.map((d) => new Elevator(d, building, scene));
   world.elevators = elevators;
 
@@ -109,10 +112,13 @@ async function main() {
     grids[lv.id] = new LevelGrid(data.meta, await loadImage(`${BASE}data/${lv.map}`), building, lv);
   }));
   const router = new Router(building, grids);
+  await loadRobotModels();   // TIKI-mini + Go2 URDF packages
 
   const events = new Emitter();
   const sim = { scene, building, world, elevators, grids, router, robots: [], events, time: 0, timeScale: 1, epoch: Date.now() / 1000 - performance.now() / 1000 };
   const ros = new RosBridge(sim);
+  const tikiLink = new TikiLink(sim);
+  sim.tikiLink = tikiLink;
   sim.ros = ros;
   events.on('scan', (r) => ros.onScan(r));
 
@@ -167,21 +173,46 @@ async function main() {
     orbit.enabled = false;
     headLamp.intensity = 6;
   }
-  function exitWalk() { walker.active = false; orbit.enabled = true; headLamp.intensity = 0; if (document.pointerLockElement) document.exitPointerLock(); }
+  function exitWalk() { walker.active = false; orbit.enabled = true; headLamp.intensity = 0; walker.path = null; walkMarker.visible = false; }
   function teleport(levelId, x, y) {
     if (state.mode !== 'walk') setMode('walk', levelId);
     const g = grids[levelId].nearestFree(x, y, 0.3, 4) || [x, y];
     walker.body.place(g[0], g[1], building.byId[levelId].elevation + 0.5);
   }
+  // walk mode: left-click = walk there, left-drag = look around, arrow keys = turn / look up-down
+  const walkMarker = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.26, 32), new THREE.MeshBasicMaterial({ color: 0xf2b632, transparent: true, opacity: 0.9, depthTest: false }));
+  walkMarker.rotation.x = -Math.PI / 2; walkMarker.renderOrder = 10; walkMarker.visible = false; scene.add(walkMarker);
+  const drag = { down: false, x: 0, y: 0, moved: 0 };
+  canvas.addEventListener('pointerdown', (e) => { if (state.mode !== 'walk' || e.button !== 0) return; drag.down = true; drag.x = e.clientX; drag.y = e.clientY; drag.moved = 0; });
+  window.addEventListener('pointermove', (e) => {
+    if (!drag.down || state.mode !== 'walk') return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+    drag.moved += Math.abs(dx) + Math.abs(dy);
+    if (drag.moved > 6) { walker.yaw -= dx * 0.004; walker.pitch = THREE.MathUtils.clamp(walker.pitch - dy * 0.004, -1.3, 1.3); }
+  });
+  window.addEventListener('pointerup', () => { drag.down = false; });
   canvas.addEventListener('click', (ev) => {
-    if (state.mode === 'walk' && !document.pointerLockElement) canvas.requestPointerLock();
-    else if (state.mode !== 'walk') pickFloor(ev);
+    if (state.mode === 'walk') { if (drag.moved <= 6) walkTo(ev); }
+    else pickFloor(ev);
   });
-  document.addEventListener('mousemove', (e) => {
-    if (document.pointerLockElement !== canvas) return;
-    walker.yaw -= e.movementX * 0.0022;
-    walker.pitch = THREE.MathUtils.clamp(walker.pitch - e.movementY * 0.0022, -1.4, 1.4);
-  });
+  function walkTo(ev) {
+    const r = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const h = world.sensorBVH.raycastFirst(raycaster.ray, THREE.DoubleSide);
+    if (!h) return;
+    const back = h.point.clone().addScaledVector(raycaster.ray.direction, -0.35);
+    const p = walker.body.pos, gx = back.x, gy = -back.z;
+    const g = world.groundAt(gx, gy, Math.max(back.y, p.z + 0.4) + 0.2, 6);
+    if (!Number.isFinite(g)) return;
+    const lv = building.levelAt(p.z), tl = building.levelAt(g);
+    // same floor: plan around walls; otherwise (stairs, ramps, lift car) head straight there
+    let pts = null;
+    if (lv.id === tl.id) pts = grids[lv.id].plan(p.x, p.y, gx, gy, 0.3);
+    walker.path = pts ? pts.slice(1) : [[gx, gy]];
+    walker.goal = [gx, gy, g];
+    walkMarker.position.copy(toWorld(gx, gy, g + 0.03)); walkMarker.visible = true;
+  }
   const LEVEL_KEYS = { b: 'B1', 1: '1F', 2: '2F', 3: '3F', 4: '4F', 5: '5F', 6: '6F', 7: '7F', 8: '8F' };
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -208,16 +239,39 @@ async function main() {
 
   function updateWalker(dt) {
     const K = walker.keys, b = walker.body;
+    // arrow keys: turn left/right, look up/down
+    walker.yaw += ((K.arrowleft ? 1 : 0) - (K.arrowright ? 1 : 0)) * 1.9 * dt;
+    walker.pitch = THREE.MathUtils.clamp(walker.pitch + ((K.arrowup ? 1 : 0) - (K.arrowdown ? 1 : 0)) * 1.2 * dt, -1.3, 1.3);
     const sp = (K.shift ? 3.2 : 1.5) * dt;
-    let f = (K.w || K.arrowup ? 1 : 0) - (K.s || K.arrowdown ? 1 : 0);
-    let s = (K.d || K.arrowright ? 1 : 0) - (K.a || K.arrowleft ? 1 : 0);
-    const L = Math.hypot(f, s) || 1; f /= L; s /= L;
+    let f = (K.w ? 1 : 0) - (K.s ? 1 : 0);
+    let s = (K.d ? 1 : 0) - (K.a ? 1 : 0);
+    if (f || s) { walker.path = null; walkMarker.visible = false; }
     const c = Math.cos(walker.yaw), sn = Math.sin(walker.yaw);
-    // plan frame: forward = (cos yaw, sin yaw); right = (sin yaw, -cos yaw)
-    b.move((c * f + sn * s) * sp, (sn * f - c * s) * sp, dt);
+    if (walker.path && walker.path.length) {
+      // click-to-move: follow the planned waypoints, turning smoothly toward them
+      const p = b.pos;
+      while (walker.path.length > 1 && Math.hypot(walker.path[0][0] - p.x, walker.path[0][1] - p.y) < 0.35) walker.path.shift();
+      const [tx, ty] = walker.path[0], d = Math.hypot(tx - p.x, ty - p.y);
+      if (d < 0.12 && walker.path.length === 1) { walker.path = null; walkMarker.visible = false; }
+      else {
+        const want = Math.atan2(ty - p.y, tx - p.x);
+        let err = want - walker.yaw; err = Math.atan2(Math.sin(err), Math.cos(err));
+        walker.yaw += THREE.MathUtils.clamp(err, -3 * dt, 3 * dt);
+        const v = Math.min(sp, d) * Math.max(0, Math.cos(err));
+        const ox = p.x, oy = p.y;
+        b.move(Math.cos(want) * v, Math.sin(want) * v, dt);
+        walker.stuck = Math.hypot(p.x - ox, p.y - oy) < v * 0.2 && v > 0 ? (walker.stuck || 0) + dt : 0;
+        if (walker.stuck > 1.2) { walker.path = null; walkMarker.visible = false; }
+      }
+    } else {
+      const L = Math.hypot(f, s) || 1; f /= L; s /= L;
+      // plan frame: forward = (cos yaw, sin yaw); right = (sin yaw, -cos yaw)
+      b.move((c * f + sn * s) * sp, (sn * f - c * s) * sp, dt);
+    }
+    const c2 = Math.cos(walker.yaw), sn2 = Math.sin(walker.yaw);
     const p = b.pos;
     camera.position.copy(toWorld(p.x, p.y, p.z + 1.6));
-    const dir = new THREE.Vector3(Math.cos(walker.pitch) * c, Math.sin(walker.pitch), -Math.cos(walker.pitch) * sn);
+    const dir = new THREE.Vector3(Math.cos(walker.pitch) * c2, Math.sin(walker.pitch), -Math.cos(walker.pitch) * sn2);
     camera.lookAt(camera.position.clone().add(dir));
     headLamp.position.copy(camera.position);
     const lv = building.levelAt(p.z);
@@ -318,7 +372,7 @@ async function main() {
     $('goalMode').classList.toggle('armed', state.goalMode);
     if (state.goalMode) { if (state.mode === 'exterior' || state.mode === 'walk') setMode('cutaway', state.selected ? state.selected.level.id : state.level); toast('바닥(또는 미니맵)을 클릭해 목적지를 지정하세요'); }
   };
-  $('stopRobot').onclick = () => state.selected?.cancel();
+  $('stopRobot').onclick = () => { state.selected?.cancel(); if (state.selected && state.selected.link) tikiLink.estop(); };
   $('aoOn').onchange = (e) => { useAO = e.target.checked; };
   $('followCam').onchange = (e) => (state.follow = e.target.checked);
   $('robotCam').onchange = (e) => (state.robotCam = e.target.checked);
@@ -336,6 +390,13 @@ async function main() {
     const room = building.byId[gl.value].rooms[+$('goalRoom').value];
     if (r.goTo(gl.value, room.x, room.y)) toast(`${r.name} → ${gl.value} ${room.name}`); else toast('경로를 찾을 수 없습니다');
   };
+  $('tikiConnect').onclick = () => {
+    if (tikiLink.connected) { tikiLink.disconnect(); $('tikiStatus').textContent = '연결 안 됨'; $('tikiConnect').textContent = 'TIKI 드라이버 연결'; return; }
+    let r = state.selected && state.selected.kind === 'amr' ? state.selected : sim.robots.find((q) => q.kind === 'amr');
+    if (!r) { r = spawn('amr', '1F', 8.5, 7.0, Math.PI / 2); selectRobot(r); }
+    tikiLink.connect($('tikiUrl').value, r);
+  };
+  tikiLink.onstatus = (t) => { $('tikiStatus').textContent = t; $('tikiConnect').textContent = tikiLink.connected || t.startsWith('연결 중') ? '연결 끊기' : 'TIKI 드라이버 연결'; };
   $('rosConnect').onclick = () => { ros.ros2 = $('ros2').checked; if (ros.connected) ros.disconnect(); else ros.connect($('rosUrl').value); };
   ros.onstatus = (s) => { $('rosStatus').textContent = s; $('rosConnect').textContent = ros.connected ? '해제' : '연결'; };
   $('panelToggle').onclick = () => $('panel').classList.toggle('closed');
@@ -447,7 +508,45 @@ async function main() {
   });
 
   // ------------------------------------------------------------ robot camera (PiP)
-  const robotCam = new THREE.PerspectiveCamera(75, 4 / 3, 0.05, 200);
+  const robotCam = new THREE.PerspectiveCamera(75, 4 / 3, 0.03, 200);
+  function placeRobotCam(cam, r) {
+    const p = r.body.pos, C = r.P.camera, c = Math.cos(r.yaw), s = Math.sin(r.yaw);
+    cam.position.copy(toWorld(p.x + c * C.x, p.y + s * C.x, p.z + C.z));
+    cam.lookAt(toWorld(p.x + c * (C.x + 3), p.y + s * (C.x + 3), p.z + C.z - 3 * Math.tan(C.pitch)));
+  }
+  // render everything (no cutaway clipping / hidden floors) for sensor-like views
+  function withFullScene(fn) {
+    const cp = renderer.clippingPlanes; renderer.clippingPlanes = [];
+    const vis = {}; for (const [id, g] of Object.entries(building.groups)) { vis[id] = g.visible; g.visible = true; }
+    const cv = {}; for (const [id, g] of Object.entries(building.ceilings)) { cv[id] = g.visible; g.visible = true; }
+    const rv = building.roof.visible; building.roof.visible = true;
+    const sv = sim.robots.map((q) => q.scanViz.visible); sim.robots.forEach((q) => (q.scanViz.visible = false));
+    try { return fn(); } finally {
+      renderer.clippingPlanes = cp;
+      for (const [id, g] of Object.entries(building.groups)) g.visible = vis[id];
+      for (const [id, g] of Object.entries(building.ceilings)) g.visible = cv[id];
+      building.roof.visible = rv; sim.robots.forEach((q, i) => (q.scanViz.visible = sv[i]));
+    }
+  }
+  // virtual camera frame for drivers (TIKI 'capture': 320 px wide RGB, base64)
+  const capCam = new THREE.PerspectiveCamera(55, 4 / 3, 0.03, 200);
+  let capRT = null;
+  sim.captureRobot = (r, w, h) => {
+    const W = 320, H = Math.max(1, Math.round((320 * h) / w));
+    if (!capRT || capRT.width !== W || capRT.height !== H) { capRT?.dispose(); capRT = new THREE.WebGLRenderTarget(W, H, { colorSpace: THREE.SRGBColorSpace }); }
+    const hf = THREE.MathUtils.degToRad(r.P.camera.hfov);
+    capCam.aspect = W / H; capCam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hf / 2) / capCam.aspect)); capCam.updateProjectionMatrix();
+    placeRobotCam(capCam, r);
+    const px = new Uint8Array(W * H * 4);
+    withFullScene(() => { renderer.setRenderTarget(capRT); renderer.render(scene, capCam); renderer.setRenderTarget(null); renderer.readRenderTargetPixels(capRT, 0, 0, W, H, px); });
+    const rgb = new Uint8Array(W * H * 3);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {   // flip: GL rows start at the bottom
+      const i = ((H - 1 - y) * W + x) * 4, o = (y * W + x) * 3;
+      rgb[o] = px[i]; rgb[o + 1] = px[i + 1]; rgb[o + 2] = px[i + 2];
+    }
+    let bin = ''; for (let i = 0; i < rgb.length; i += 0x8000) bin += String.fromCharCode.apply(null, rgb.subarray(i, i + 0x8000));
+    return { w: W, h: H, rgb: btoa(bin) };
+  };
 
   // ------------------------------------------------------------ resize + loop
   function resize() {
@@ -507,8 +606,7 @@ async function main() {
       const W = Math.min(320, window.innerWidth * 0.3), H = W * 0.75;
       const x = window.innerWidth - W - 12 - 372, y = 12;
       const p = r.body.pos;
-      robotCam.position.copy(toWorld(p.x + Math.cos(r.yaw) * 0.25, p.y + Math.sin(r.yaw) * 0.25, p.z + r.P.height + 0.05));
-      robotCam.lookAt(toWorld(p.x + Math.cos(r.yaw) * 3, p.y + Math.sin(r.yaw) * 3, p.z + r.P.height - 0.25));
+      placeRobotCam(robotCam, r);
       robotCam.aspect = W / H; robotCam.updateProjectionMatrix();
       renderer.clippingPlanes = [];
       const vis = {}; for (const [id, g] of Object.entries(building.groups)) { vis[id] = g.visible; g.visible = true; }
