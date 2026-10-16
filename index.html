@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KOPO CTC Sim — 분당융합기술교육원 3D 디지털 트윈</title>
+  <meta name="description" content="한국폴리텍대학 분당융합기술교육원 건물(B1~8F) 3D 디지털 트윈 및 이동로봇/4족로봇 시뮬레이션 (LiDAR, SLAM, 경로계획, 엘리베이터/계단 층간 이동, rosbridge)" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='14' y='6' width='36' height='52' rx='3' fill='%231d2a50'/><g fill='%23f2b632'><rect x='20' y='12' width='8' height='6'/><rect x='36' y='12' width='8' height='6'/><rect x='20' y='24' width='8' height='6'/><rect x='36' y='24' width='8' height='6'/><rect x='20' y='36' width='8' height='6'/><rect x='36' y='36' width='8' height='6'/></g><rect x='27' y='46' width='10' height='12' fill='%23fff'/></svg>" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="view"></canvas>
+    <div id="labels"></div>
+    <aside id="panel">
+      <header>
+        <h1>분당융합기술교육원 <span>3D Digital Twin</span></h1>
+        <p class="sub">한국폴리텍대학 · B1–8F · 로봇 시뮬레이션 공간</p>
+      </header>
+      <section>
+        <h2>보기</h2>
+        <div class="seg" id="modes">
+          <button data-mode="exterior" class="on">외관</button>
+          <button data-mode="cutaway">층 단면</button>
+          <button data-mode="single">단일 층</button>
+          <button data-mode="walk">1인칭</button>
+        </div>
+        <div class="levels" id="levels"></div>
+      </section>
+      <section>
+        <h2>공간 <small id="roomsLevel"></small></h2>
+        <ul id="rooms"></ul>
+      </section>
+      <section>
+        <h2>엘리베이터</h2>
+        <div id="elevators"></div>
+      </section>
+      <section>
+        <h2>로봇</h2>
+        <div class="row">
+          <button id="addAmr">＋ AMR</button>
+          <button id="addQuad">＋ 4족 로봇</button>
+        </div>
+        <div class="row"><select id="robotSel"></select><button id="delRobot" title="삭제">✕</button></div>
+        <div class="row">
+          <button id="goalMode">🎯 목표 지정</button>
+          <button id="stopRobot">■ 정지</button>
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="followCam" /> 추적 카메라</label>
+          <label><input type="checkbox" id="robotCam" checked /> 로봇 카메라</label>
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="showScan" checked /> LiDAR 표시</label>
+          <label><input type="checkbox" id="slamOn" checked /> SLAM</label>
+        </div>
+        <div class="row"><label class="grow">시뮬레이션 속도 <span id="tsVal">×1</span><input type="range" id="timeScale" min="0" max="5" step="1" value="1" /></label></div>
+        <div class="row"><label class="grow">오도메트리 노이즈 <input type="range" id="noise" min="0" max="0.15" step="0.005" value="0.02" /></label></div>
+        <div class="row"><label class="grow">목적지 층
+          <select id="goalLevel"></select></label>
+          <select id="goalRoom"></select><button id="goRoom">이동</button>
+        </div>
+        <p class="status" id="robotStatus">—</p>
+        <p class="hint">텔레옵: <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd> (단면/외관 보기)</p>
+      </section>
+      <section>
+        <h2>ROS 연동 (rosbridge)</h2>
+        <div class="row"><input id="rosUrl" value="ws://localhost:9090" /><button id="rosConnect">연결</button></div>
+        <div class="row"><label><input type="checkbox" id="ros2" checked /> ROS 2 메시지 형식</label><span id="rosStatus" class="status">미연결</span></div>
+      </section>
+      <section>
+        <h2>내보내기</h2>
+        <div class="row wrap">
+          <button id="expGlb">건물 GLB</button>
+          <button id="expJson">building.json</button>
+          <button id="expMap">층 맵 (PGM+YAML)</button>
+          <button id="expSlam">SLAM 맵</button>
+        </div>
+      </section>
+      <footer>도면: 2015.12.14 실내 평면도(IP-01~IP-28, 1/100) 기반 자동 추출 · <a href="https://github.com/samcho93/webKopoCTCSim" target="_blank" rel="noopener">GitHub</a></footer>
+    </aside>
+    <button id="panelToggle" title="패널">☰</button>
+    <div id="hud">
+      <div id="hudLevel"></div>
+      <div id="hudPos"></div>
+    </div>
+    <div id="walkHelp" class="hidden">
+      <b>1인칭 워크</b> 화면 클릭 → 마우스 시점 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 · <kbd>Shift</kbd> 달리기 ·
+      <kbd>E</kbd> 엘리베이터 호출/탑승 · 탑승 중 <kbd>B</kbd>/<kbd>1</kbd>–<kbd>8</kbd> 층 선택 · <kbd>Esc</kbd> 해제
+    </div>
+    <div id="toast"></div>
+    <div id="minimapWrap">
+      <div class="mmHead"><span id="mmTitle">맵</span>
+        <div class="seg small" id="mmLayer"><button data-l="truth" class="on">도면</button><button data-l="slam">SLAM</button></div></div>
+      <canvas id="minimap" width="620" height="420"></canvas>
+    </div>
+    <div id="pipLabel" class="hidden">로봇 카메라</div>
+    <div id="loading"><div class="spinner"></div><p>도면 데이터로 건물 생성 중…</p></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

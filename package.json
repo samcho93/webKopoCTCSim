@@ -1,0 +1,20 @@
+{
+  "name": "webkopoctcsim",
+  "private": true,
+  "version": "0.1.0",
+  "description": "한국폴리텍대학 분당융합기술교육원 3D digital twin + robot simulation sandbox (web)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "extract": "python -I tools/extract_floorplans.py"
+  },
+  "dependencies": {
+    "three": "0.180.0",
+    "three-mesh-bvh": "0.9.1"
+  },
+  "devDependencies": {
+    "vite": "7.1.5"
+  }
+}
