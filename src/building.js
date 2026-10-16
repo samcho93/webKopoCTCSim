@@ -1,7 +1,7 @@
 // Builds the 3D building from building.json (generated from the floor-plan PDF).
 import * as THREE from 'three';
 import { GeoBuilder, MultiBuilder, PlanMask, subtractRects, toWorld } from './geo.js';
-import { T, sign } from './textures.js';
+import { T, sign, stoneSet, officeFacade } from './textures.js';
 
 const SLAB = 0.25;
 
@@ -10,6 +10,11 @@ function mat(key) {
   return m;
 }
 let MATS = null;
+
+function stoneMat(set, meters, bumpScale) {
+  for (const t of [set.map, set.bump, set.rough]) t.repeat.set(1 / meters, 1 / meters);
+  return new THREE.MeshStandardMaterial({ map: set.map, bumpMap: set.bump, bumpScale, roughnessMap: set.rough, roughness: 1, envMapIntensity: 0.55 });
+}
 
 function makeMaterials(envMap) {
   const tex = (fn, meters) => { const t = fn(); t.repeat.set(1 / meters, 1 / meters); return t; };
@@ -26,12 +31,14 @@ function makeMaterials(envMap) {
     frameInt: std({ color: 0xa3a8ad, metalness: 0.6, roughness: 0.35 }),
     tileWall: std({ map: tex(T.tileWall, 1.2), roughness: 0.4 }),
     concrete: std({ map: tex(T.concrete, 3), roughness: 0.9 }),
-    facadeStone: std({ map: tex(T.facadeStone, 2.4), roughness: 0.7 }),
-    granite: std({ map: tex(T.granite, 2.4), roughness: 0.35 }),
+    facadeStone: stoneMat(stoneSet('limestone', { cols: 2, rows: 4, base: '#e9dcc2', joint: '#a8987c', vary: 0.035, speckle: ['#b9ad96', '#f4efe4', '#9c9079'], grain: 0.12, rough: [0.62, 0.78], seed: 8 }), 2.4, 0.9),
+    stoneBand: stoneMat(stoneSet('limestoneBand', { cols: 2, rows: 1, base: '#ece1cc', joint: '#ad9f86', vary: 0.025, speckle: ['#bdb19c', '#f6f2ea'], grain: 0.1, rough: [0.55, 0.7], seed: 18 }), 2.4, 0.6),
+    granite: stoneMat(stoneSet('granite', { cols: 2, rows: 4, base: '#4a4d52', joint: '#2b2d30', vary: 0.03, speckle: ['#111214', '#8d9096', '#c3c5c8', '#2a2c2f'], grain: 0.35, rough: [0.18, 0.32], seed: 9 }), 2.4, 0.5),
     ceiling: std({ map: tex(T.ceiling, 2.4), emissiveMap: tex(T.ceilingEmit, 2.4), emissive: new THREE.Color(0xfff6e6), emissiveIntensity: 1.4, roughness: 0.9, side: THREE.DoubleSide }),
     glassInt: new THREE.MeshPhysicalMaterial({ color: 0xcfe3e6, metalness: 0.0, roughness: 0.05, transparent: true, opacity: 0.22, envMapIntensity: 1.0, depthWrite: false, side: THREE.DoubleSide }),
-    glassExt: new THREE.MeshPhysicalMaterial({ color: 0x9cc0d8, metalness: 0.35, roughness: 0.04, transparent: true, opacity: 0.42, envMapIntensity: 2.2, depthWrite: false, side: THREE.DoubleSide }),
-    frame: std({ color: 0x3b3f44, metalness: 0.7, roughness: 0.35 }),
+    // low-E reflective blue glazing (as on the street photos): mostly mirror of the sky
+    glassExt: new THREE.MeshPhysicalMaterial({ color: 0x5f8db0, metalness: 0.9, roughness: 0.025, transparent: true, opacity: 0.86, envMapIntensity: 1.35, depthWrite: false, side: THREE.DoubleSide, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: 0.02 }),
+    frame: std({ color: 0x2b2f34, metalness: 0.75, roughness: 0.32 }),
     steel: std({ color: 0x9aa1a8, metalness: 0.9, roughness: 0.25 }),
     desk: std({ map: tex(T.wood, 1.2), color: 0xf0e2c8, roughness: 0.55 }),
     wood: std({ map: tex(T.wood, 1.2), roughness: 0.6 }),
@@ -46,14 +53,45 @@ function makeMaterials(envMap) {
     plant: std({ color: 0x4f7a3a, roughness: 0.9 }),
     soil: std({ color: 0x5b4632, roughness: 1 }),
     trunk: std({ color: 0x5a4330, roughness: 1 }),
-    neighbor: std({ color: 0xbfc3c6, roughness: 0.8 }),
-    neighborGlass: std({ color: 0x6e8aa3, metalness: 0.5, roughness: 0.2 }),
+    neighbor: std({ map: tex(() => officeFacade('a'), 3.4), roughness: 0.55, metalness: 0.15 }),
+    neighbor2: std({ map: tex(() => officeFacade('b', { frame: '#8d8f91', glass: '#3b5468', spandrel: '#d8d2c6', seed: 7 }), 3.0), roughness: 0.55, metalness: 0.15 }),
+    neighborRoof: std({ map: tex(T.concrete, 3), color: 0x8f918e, roughness: 0.95 }),
     roof: std({ map: tex(T.concrete, 3), color: 0x9c9f9a, roughness: 0.95 }),
     lineYellow: std({ color: 0xf2c230, roughness: 0.6 }),
     lineWhite: std({ color: 0xf2f2f2, roughness: 0.6 }),
   };
   for (const m of Object.values(MATS)) if (envMap) m.envMap = envMap;
   return MATS;
+}
+
+/** Least-squares circle through raster cells of a curved facade. */
+function fitArc(cells) {
+  if (cells.length < 25) return null;
+  // x^2 + y^2 + D x + E y + F = 0
+  let Sxx = 0, Sxy = 0, Syy = 0, Sx = 0, Sy = 0, N = 0, Sxz = 0, Syz = 0, Sz = 0;
+  const pts = cells.map(([a, b, c, d]) => [(a + c) / 2, (b + d) / 2]);
+  for (const [x, y] of pts) {
+    const z = -(x * x + y * y);
+    Sxx += x * x; Sxy += x * y; Syy += y * y; Sx += x; Sy += y; N++; Sxz += x * z; Syz += y * z; Sz += z;
+  }
+  const M = [[Sxx, Sxy, Sx], [Sxy, Syy, Sy], [Sx, Sy, N]], B = [Sxz, Syz, Sz];
+  const det = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  const d0 = det(M); if (Math.abs(d0) < 1e-9) return null;
+  const col = (i) => M.map((row, j) => row.map((v, k) => (k === i ? B[j] : v)));
+  const D = det(col(0)) / d0, E = det(col(1)) / d0, F = det(col(2)) / d0;
+  const xc = -D / 2, yc = -E / 2, r = Math.sqrt(xc * xc + yc * yc - F);
+  if (!(r > 2 && r < 15)) return null;
+  const set = new Set();
+  let a0 = Infinity, a1 = -Infinity;
+  cells.forEach((c, i) => {
+    const [x, y] = pts[i];
+    if (Math.abs(Math.hypot(x - xc, y - yc) - r) > 0.35) return;
+    set.add(c);
+    const a = Math.atan2(y - yc, x - xc);
+    a0 = Math.min(a0, a); a1 = Math.max(a1, a);
+  });
+  if (set.size < 20 || a1 - a0 < 0.3) return null;
+  return { xc, yc, r, a0, a1, cells: set };
 }
 
 /** True when the outward side of a facade face points to the outside of the footprint. */
@@ -189,11 +227,21 @@ export class Building {
     }
     // curtain wall glazing (incl. the curved SE corner)
     const mullionCells = new Set();
+    // the curved SE bay: fit a circle to its raster cells and build it smooth
+    const arc = lv.index >= 2 ? fitArc(lv.facadeGlass.filter(([a, b, c, d]) => (a + c) / 2 > 19 && (b + d) / 2 < 7 && !terrace.has((a + c) / 2, (b + d) / 2))) : null;
+    if (arc) this.curvedBay(mb, arc, lv, z0, zc, wallH);
     for (const r of lv.facadeGlass) {
       const [x0, y0, x1, y1] = r;
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      if (arc && arc.cells.has(r)) continue;
       if (terrace.has(cx, cy)) { mb.get('steel').box(x0, y0, z0 + 1.05, x1, y1, z0 + 1.1); mb.get('glassInt').box(x0, y0, z0, x1, y1, z0 + 1.05); continue; }
       mb.get('glassExt').box(x0, y0, z0, x1, y1, wallH);
+      // projecting stone floor ledge (the thick bands of the curved bay on the photos)
+      if (lv.index >= 2) {
+        const e = 0.34;
+        mb.get('stoneBand').box(x0 - e, y0 - e, z0 - 0.4, x1 + e, y1 + e, z0 - 0.02, null);
+        if (lv.id === '7F') mb.get('stoneBand').box(x0 - e, y0 - e, z0 + lv.height - 0.45, x1 + e, y1 + e, z0 + lv.height - 0.02, null);
+      }
       // horizontal transoms at sill and ceiling height + spandrel at slab
       mb.get('frame').box(x0 - 0.02, y0 - 0.02, z0, x1 + 0.02, y1 + 0.02, z0 + 0.06);
       mb.get('frame').box(x0 - 0.02, y0 - 0.02, zc, x1 + 0.02, y1 + 0.02, zc + 0.06);
@@ -232,6 +280,36 @@ export class Building {
     const cg = new THREE.Group(); cg.name = `ceiling-${lv.id}`; g.add(cg);
     this.addMeshes(cb, cg, { physics: false, sensors: false, cast: false });
     this.ceilings[lv.id] = cg;
+  }
+
+  /** Smooth cylindrical curtain wall with mullions, transoms and projecting stone ledges. */
+  curvedBay(mb, arc, lv, z0, zc, wallH) {
+    const { xc, yc, r, a0, a1 } = arc;
+    const L = r * (a1 - a0), n = Math.max(8, Math.ceil(L / 0.25));
+    const P = (a, rr, z) => [xc + rr * Math.cos(a), yc + rr * Math.sin(a), z];
+    const ring = (key, rIn, rOut, zb, zt, caps = true) => {
+      const b = mb.get(key);
+      for (let i = 0; i < n; i++) {
+        const u = a0 + ((a1 - a0) * i) / n, v = a0 + ((a1 - a0) * (i + 1)) / n, m = (u + v) / 2;
+        const no = [Math.cos(m), Math.sin(m), 0], ni = [-no[0], -no[1], 0];
+        b.quad(P(u, rOut, zb), P(v, rOut, zb), P(v, rOut, zt), P(u, rOut, zt), no);
+        b.quad(P(v, rIn, zb), P(u, rIn, zb), P(u, rIn, zt), P(v, rIn, zt), ni);
+        if (caps) {
+          b.quad(P(u, rIn, zt), P(u, rOut, zt), P(v, rOut, zt), P(v, rIn, zt), [0, 0, 1]);
+          b.quad(P(v, rIn, zb), P(v, rOut, zb), P(u, rOut, zb), P(u, rIn, zb), [0, 0, -1]);
+        }
+      }
+    };
+    ring('glassExt', r - 0.012, r + 0.012, z0, wallH, false);
+    ring('frame', r - 0.04, r + 0.04, z0, z0 + 0.07);      // sill transom
+    ring('frame', r - 0.04, r + 0.04, zc, zc + 0.07);      // head transom
+    ring('stoneBand', r - 0.3, r + 0.36, z0 - 0.4, z0 - 0.02);  // floor ledge
+    if (lv.id === '7F') ring('stoneBand', r - 0.3, r + 0.42, z0 + lv.height - 0.5, z0 + lv.height - 0.02);
+    const nm = Math.max(2, Math.round(L / 1.2));
+    for (let k = 0; k <= nm; k++) {
+      const a = a0 + ((a1 - a0) * k) / nm, [x, y] = P(a, r, 0);
+      mb.get('frame').box(x - 0.035, y - 0.035, z0, x + 0.035, y + 0.035, wallH);
+    }
   }
 
   facadeBox(mb, [x0, y0, x1, y1], z0, z1, fp, outerKey) {
@@ -450,8 +528,10 @@ export class Building {
     // neighbours (simple massing, as in the street photos)
     const nb = [[-22, 2, -8, 20, 24], [30.5, 24, 46, 40, 18], [-24, 26, -6, 44, 31], [6, 26, 22, 40, 15], [36, -2, 48, 18, 12]];
     for (const [x0, y0, x1, y1, h] of nb) {
-      mb.get('neighbor').box(x0, y0, 0, x1, y1, h);
-      for (let z = 3.5; z < h - 1; z += 3.4) mb.get('neighborGlass').box(x0 - 0.05, y0 - 0.05, z, x1 + 0.05, y1 + 0.05, z + 1.6, { top: false, bottom: false });
+      const k = (x0 + y0) % 2 ? 'neighbor2' : 'neighbor';
+      mb.get(k).box(x0, y0, 0, x1, y1, h, { top: false, bottom: false });
+      mb.get('neighborRoof').box(x0, y0, h, x1, y1, h + 0.01, { bottom: false });
+      mb.get('neighborRoof').box(x0 - 0.2, y0 - 0.2, h - 0.3, x1 + 0.2, y1 + 0.2, h + 0.6, { bottom: false });
     }
     // street trees + lamp posts on the south sidewalk
     const trees = [];
@@ -468,8 +548,8 @@ export class Building {
     this.addMeshes(mb, g, { physics: true, sensors: true });
     // foliage: clusters of low-poly blobs
     const leafGeo = new THREE.IcosahedronGeometry(1, 1);
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x5f8f3e, roughness: 0.9, flatShading: true });
-    const leaf2 = new THREE.MeshStandardMaterial({ color: 0x476f2e, roughness: 0.9, flatShading: true });
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x56783a, roughness: 0.95, flatShading: true });
+    const leaf2 = new THREE.MeshStandardMaterial({ color: 0x3d5c2b, roughness: 0.95, flatShading: true });
     const blobs = [[0, 3.4, 0, 1.5], [0.8, 3.0, 0.3, 1.0], [-0.7, 3.1, -0.4, 1.05], [0.1, 4.3, 0.2, 1.0], [-0.3, 2.9, 0.7, 0.9]];
     const inst = new THREE.InstancedMesh(leafGeo, leafMat, trees.length * blobs.length);
     const inst2 = new THREE.InstancedMesh(leafGeo, leaf2, trees.length * 2);

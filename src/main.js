@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { N8AOPass } from 'n8ao';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { Building } from './building.js';
@@ -39,19 +41,35 @@ async function main() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environment = env;
+  scene.fog = new THREE.Fog(0xcbd8e4, 140, 700); // light urban haze
 
   const sky = new Sky(); sky.scale.setScalar(4000); scene.add(sky);
   const su = sky.material.uniforms;
-  su.turbidity.value = 4; su.rayleigh.value = 1.2; su.mieCoefficient.value = 0.004; su.mieDirectionalG.value = 0.8;
-  const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(38), THREE.MathUtils.degToRad(200));
+  su.turbidity.value = 3.2; su.rayleigh.value = 1.6; su.mieCoefficient.value = 0.004; su.mieDirectionalG.value = 0.82;
+  const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(36), THREE.MathUtils.degToRad(205));
   su.sunPosition.value.copy(sunDir);
 
-  const hemi = new THREE.HemisphereLight(0xdfeaff, 0x8a8172, 0.85); scene.add(hemi);
+  // Reflection environment: the same sky + a city skyline + ground, so the
+  // reflective glazing mirrors blue sky and neighbouring towers like on the photos.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  const envSky = new Sky(); envSky.scale.setScalar(900);
+  Object.entries(su).forEach(([k, u]) => { envSky.material.uniforms[k].value = u.value; });
+  envScene.add(envSky);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(800, 32), new THREE.MeshBasicMaterial({ color: 0x9a9c9c }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -2; envScene.add(ground);
+  const towerMat = [0x8e99a3, 0xb7bdc2, 0x6f7f8e, 0xd4d1ca].map((c) => new THREE.MeshBasicMaterial({ color: c }));
+  for (let i = 0; i < 46; i++) {
+    const a = (i / 46) * Math.PI * 2 + Math.sin(i * 7.3) * 0.05, r = 140 + (i % 5) * 35, h = 20 + ((i * 37) % 70);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(25 + (i % 3) * 10, h, 25), towerMat[i % 4]);
+    m.position.set(Math.cos(a) * r, h / 2 - 2, Math.sin(a) * r); m.lookAt(0, h / 2, 0); envScene.add(m);
+  }
+  const env = pmrem.fromScene(envScene, 0.0).texture;
+  scene.environment = env;
+
+  const hemi = new THREE.HemisphereLight(0xe8eef5, 0x9a8b74, 0.8); scene.add(hemi);
   const amb = new THREE.AmbientLight(0xffffff, 0.18); scene.add(amb);
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
+  const sun = new THREE.DirectionalLight(0xffeccf, 2.8);
   sun.position.copy(sunDir).multiplyScalar(80).add(new THREE.Vector3(13, 0, -8));
   sun.target.position.set(13, 10, -8); scene.add(sun.target);
   sun.castShadow = true;
@@ -64,6 +82,15 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 3000);
   camera.position.set(-22, 22, 34);
   const labelRenderer = new CSS2DRenderer({ element: $('labels') });
+
+  // post: screen-space ambient occlusion (contact shadows in corners, under ledges, around furniture)
+  const composer = new EffectComposer(renderer);
+  const aoPass = new N8AOPass(scene, camera, window.innerWidth, window.innerHeight);
+  Object.assign(aoPass.configuration, { aoRadius: 1.6, distanceFalloff: 0.6, intensity: 2.6, halfRes: true, depthAwareUpsampling: true, gammaCorrection: false, color: new THREE.Color(0x10141a) });
+  aoPass.setQualityMode('Medium');
+  composer.addPass(aoPass);
+  composer.addPass(new OutputPass());
+  let useAO = true;
 
   const orbit = new OrbitControls(camera, canvas);
   orbit.target.set(13, 9, -8.6);
@@ -292,6 +319,7 @@ async function main() {
     if (state.goalMode) { if (state.mode === 'exterior' || state.mode === 'walk') setMode('cutaway', state.selected ? state.selected.level.id : state.level); toast('바닥(또는 미니맵)을 클릭해 목적지를 지정하세요'); }
   };
   $('stopRobot').onclick = () => state.selected?.cancel();
+  $('aoOn').onchange = (e) => { useAO = e.target.checked; };
   $('followCam').onchange = (e) => (state.follow = e.target.checked);
   $('robotCam').onchange = (e) => (state.robotCam = e.target.checked);
   $('showScan').onchange = (e) => sim.robots.forEach((r) => (r.scanViz.visible = e.target.checked));
@@ -425,6 +453,7 @@ async function main() {
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false); labelRenderer.setSize(w, h);
+    composer.setSize(w, h); composer.setPixelRatio(renderer.getPixelRatio());
     camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize); resize();
@@ -468,7 +497,7 @@ async function main() {
     renderer.clippingPlanes = building.clipPlanes || [];
     renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
     renderer.setScissorTest(false);
-    renderer.render(scene, camera);
+    if (useAO) composer.render(); else renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
 
     // PiP robot camera
@@ -523,7 +552,7 @@ async function main() {
     callElevator: (id, level) => elevators.find((e) => e.id === id)?.call(level),
     get state() { return state; },
     walker,
-    camera, renderer,
+    camera, renderer, orbit, aoPass,
   });
   window.sim = sim;
 

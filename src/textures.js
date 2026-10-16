@@ -138,3 +138,77 @@ export function sign(text, { w = 1024, h = 256, bg = null, fg = '#1c2a52', font 
   t.anisotropy = 8;
   return t;
 }
+
+/**
+ * Stone cladding set (colour + bump + roughness) with per-panel tone variation,
+ * mineral speckle and recessed joints. Texture spans `cols x rows` panels.
+ */
+export function stoneSet(key, { size = 1024, cols = 2, rows = 4, base, joint, vary = 0.03, speckle = [], grain = 0.08, veins = 0, rough = [0.6, 0.75], seed = 1 }) {
+  const k = `set:${key}`;
+  if (cache.has(k)) return cache.get(k);
+  const mk = () => { const c = document.createElement('canvas'); c.width = c.height = size; return [c, c.getContext('2d')]; };
+  const [cc, g] = mk(), [bc, b] = mk(), [rc, r] = mk();
+  const R = rand(seed), w = size / cols, h = size / rows, jw = Math.max(2, size / 400);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const d = (R() - 0.5) * vary;
+    g.fillStyle = shade(base, d); g.fillRect(i * w, j * h, w, h);
+    // soft cloudy tone inside each panel
+    for (let q = 0; q < 6; q++) {
+      const gx = i * w + R() * w, gy = j * h + R() * h, rad = (0.2 + R() * 0.5) * w;
+      const gr = g.createRadialGradient(gx, gy, 0, gx, gy, rad);
+      const t = shade(base, d + (R() - 0.5) * vary * 1.4);
+      gr.addColorStop(0, t + '55'); gr.addColorStop(1, t + '00');
+      g.fillStyle = gr; g.fillRect(i * w, j * h, w, h);
+    }
+    const v = Math.floor(200 + (R() - 0.5) * 30);
+    b.fillStyle = `rgb(${v},${v},${v})`; b.fillRect(i * w, j * h, w, h);
+    const rv = Math.floor(255 * (rough[0] + R() * (rough[1] - rough[0])));
+    r.fillStyle = `rgb(${rv},${rv},${rv})`; r.fillRect(i * w, j * h, w, h);
+  }
+  // mineral grain / speckle
+  const n = Math.floor(size * size * grain);
+  for (let q = 0; q < n; q++) {
+    const x = R() * size, y = R() * size, s = R() < 0.9 ? 1 : 2;
+    const col = speckle.length ? speckle[Math.floor(R() * speckle.length)] : '#000000';
+    g.globalAlpha = 0.08 + R() * 0.25; g.fillStyle = col; g.fillRect(x, y, s, s);
+    b.globalAlpha = 0.25; b.fillStyle = R() < 0.5 ? '#fff' : '#888'; b.fillRect(x, y, s, s);
+  }
+  g.globalAlpha = 1; b.globalAlpha = 1;
+  for (let q = 0; q < veins; q++) {
+    g.strokeStyle = `rgba(255,255,255,${0.04 + R() * 0.06})`; g.lineWidth = 1 + R() * 2;
+    g.beginPath(); let x = R() * size, y = R() * size; g.moveTo(x, y);
+    for (let s = 0; s < 6; s++) { x += (R() - 0.3) * 120; y += (R() - 0.5) * 60; g.lineTo(x, y); } g.stroke();
+  }
+  // joints
+  g.fillStyle = joint; b.fillStyle = '#000'; r.fillStyle = '#e6e6e6';
+  for (let i = 0; i <= cols; i++) for (const c of [g, b, r]) c.fillRect(i * w - jw / 2, 0, jw, size);
+  for (let j = 0; j <= rows; j++) for (const c of [g, b, r]) c.fillRect(0, j * h - jw / 2, size, jw);
+  // slight dirt streaks under horizontal joints (weathering)
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const gr = g.createLinearGradient(0, j * h, 0, j * h + h * 0.35);
+    gr.addColorStop(0, 'rgba(80,70,55,0.07)'); gr.addColorStop(1, 'rgba(80,70,55,0)');
+    g.fillStyle = gr; g.fillRect(i * w + jw, j * h + jw, w - 2 * jw, h * 0.35);
+  }
+  const tex = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const out = { map: tex(cc, true), bump: tex(bc, false), rough: tex(rc, false) };
+  cache.set(k, out);
+  return out;
+}
+
+/** Generic office facade (window grid) for context buildings. bay = 1 texture tile. */
+export function officeFacade(key, { frame = '#c9ccce', glass = '#4d6a82', spandrel = '#b9bcbf', seed = 3 } = {}) {
+  return canvasTex(`office:${key}`, 512, (g, s) => {
+    const R = rand(seed);
+    g.fillStyle = spandrel; g.fillRect(0, 0, s, s);
+    noise(g, s, 0.08, seed);
+    const gx = s * 0.08, gy0 = s * 0.28, gy1 = s * 0.9;
+    const gr = g.createLinearGradient(0, gy0, 0, gy1);
+    gr.addColorStop(0, shade(glass, 0.12)); gr.addColorStop(1, shade(glass, -0.06));
+    g.fillStyle = gr; g.fillRect(gx, gy0, s - 2 * gx, gy1 - gy0);
+    // random blinds / lit offices
+    if (R() < 0.5) { g.fillStyle = 'rgba(235,235,225,0.5)'; g.fillRect(gx, gy0, s - 2 * gx, (gy1 - gy0) * R() * 0.6); }
+    g.fillStyle = frame;
+    g.fillRect(gx - 4, gy0 - 4, s - 2 * gx + 8, 8); g.fillRect(gx - 4, gy1 - 4, s - 2 * gx + 8, 8);
+    g.fillRect(s / 2 - 3, gy0, 6, gy1 - gy0); g.fillRect(gx - 4, gy0, 8, gy1 - gy0); g.fillRect(s - gx - 4, gy0, 8, gy1 - gy0);
+  });
+}
