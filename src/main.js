@@ -17,7 +17,7 @@ import { loadRobotModels } from './urdfModels.js';
 import { Equipment } from './equipment.js';
 import { DisplayRobots } from './displayRobots.js';
 import { placeCars } from './parkedCar.js';
-import { RebotArms } from './rebotArms.js';
+import { DeskArms } from './deskArms.js';
 import { CafeStation } from './cafeStation.js';
 import { createAurenStations } from './aurenStations.js';
 import { toWorld } from './geo.js';
@@ -686,8 +686,8 @@ async function main() {
   const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
   displays.load();
   placeCars(building);                                                        // 1F parking: Kia Carnival
-  const arms = new RebotArms(building);                                        // 3F 306: reBot Arm on every desk
-  arms.load().catch((e) => console.warn('reBot arms', e));
+  const arms = new DeskArms(building);                                         // 3F 306 reBot Arm / 308 SO-ARM101 on desks
+  arms.load().catch((e) => console.warn('desk arms', e));
   let aurens = [];                                                            // 3F 305: VALEM machines, live firmware
   createAurenStations(building, (m) => toast(m)).then((a) => { aurens = a; }).catch((e) => console.warn('AurenSim stations', e));
   const cafes = [];                                                            // 3F 305: M400 robot cafe

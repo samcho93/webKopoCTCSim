@@ -132,7 +132,9 @@ EDITS = {
         *[op for x0 in (19.7, 21.25, 22.8, 24.35) for y0 in (10.15, 12.55, 14.95) for op in (
             dict(op="desk", rect=[x0, y0, round(x0 + 0.75, 2), round(y0 + 2.05, 2)], top=0.75),
             dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 0.525, 3), top=0.75, yaw=3.1416),
-            dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 1.525, 3), top=0.75, yaw=3.1416))],
+            dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 1.525, 3), top=0.75, yaw=3.1416),
+            # SO-ARM101 in the middle of the desk, between the two TIKI-mini, moving freely (src/deskArms.js)
+            dict(op="equip", model="so101-arm", x=round(x0 + 0.375, 3), y=round(y0 + 1.025, 3), top=0.75, yaw=0.0))],
         # 302 / 303 become professors' offices furnished like 304 (L desk with PIN-UP partition, meeting table,
         # low cabinets, entrance counter). 302 (door at its west end): same layout against its east wall;
         # 303 (door at its east end): mirrored against its west wall so the doorway stays clear.
