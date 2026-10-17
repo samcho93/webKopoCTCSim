@@ -71,6 +71,23 @@ ELEVATORS = [
 #   clear  : remove walls / partitions / furniture inside the rect (layers: wall, part, furn)
 #   wall   : add a solid wall
 #   rooms  : drop / rename room labels
+#   desk   : add a fixed bench/table (furniture layer -> 3D desk, collision, nav maps)
+#   equip  : place an equipment model (rendered at runtime: hplc1260, m400-robot-cafe)
+#   solid  : occupied in the nav/ROS maps only (equipment drawn at runtime, e.g. the cafe counter)
+
+
+def _lab_grid(x0, x1, y0, y1, cols, rows, w, d, model, yaw):
+    """Evenly spaced benches (w x d) in [x0,x1] x [y0,y1] with one model on each."""
+    ops = []
+    px, py = (x1 - x0) / cols, (y1 - y0) / rows
+    for r in range(rows):
+        for c in range(cols):
+            cx, cy = round(x0 + px * (c + 0.5), 3), round(y0 + py * (r + 0.5), 3)
+            ops.append(dict(op="desk", rect=[round(cx - w / 2, 3), round(cy - d / 2, 3), round(cx + w / 2, 3), round(cy + d / 2, 3)], top=0.75))
+            ops.append(dict(op="equip", model=model, x=cx, y=cy, top=0.75, yaw=yaw))
+    return ops
+
+
 EDITS = {
     "3F": [
         # 307 준비실 merged into 308 실습실 #2: the 307 doorway stays as the front door,
@@ -80,6 +97,36 @@ EDITS = {
         dict(op="wall", rect=[19.75, 9.7, 20.85, 9.9]),                               # old 308 doorway -> corridor wall
         dict(op="clear", rect=[25.4, 9.6, 26.3, 9.95], layers=["wall", "part", "furn"]),  # new rear door of 308
         dict(op="rooms", drop=["307 준비실"], rename={"308 실습실 #2": "308 실습실 #2 (구 307 준비실 통합)"}),
+        # 305: cafesim M400 robot cafe against the corridor-side (north) wall. Origin = counter centre
+        # line 0.33 m in front of the wall face (y 7.2); counter 2.6 m, UR5e pedestal + pickup table in front
+        dict(op="equip", model="m400-robot-cafe", x=24.65, y=6.87, top=0.0, yaw=0.0),
+        dict(op="solid", rect=[23.33, 6.45, 25.97, 7.2]),        # counter
+        dict(op="solid", rect=[24.18, 5.25, 24.86, 6.23]),       # robot pedestal + pickup table
+        dict(op="rooms", rename={"305 프로젝트실 #4": "305 프로젝트실 #4 · M400 로봇 카페"}),
+        # 302: exhibition of 10 Unitree Go2 (display only, click = step in place 5x), facing the entrance (north)
+        *[op for x in (14.3, 15.9) for y in (1.2, 2.3, 3.4, 4.5, 5.6) for op in (
+            dict(op="equip", model="go2-display", x=x, y=y, top=0.0, yaw=1.5708),
+            dict(op="solid", rect=[round(x - 0.2, 2), round(y - 0.4, 2), round(x + 0.2, 2), round(y + 0.4, 2)]))],
+        dict(op="rooms", rename={"302 프로젝트실 #2": "302 프로젝트실 #2 · Go2 전시"}),
+        # 308 (merged with 307): desk beside the column (grid 4, window side) removed; 4 more student desks,
+        # same size (0.75 x 2.05 m) and column pitch (1.55 m) as the existing ones; two TIKI-mini on every
+        # desk of the room (display only)
+        dict(op="clear", rect=[20.55, 15.0, 21.4, 16.8], layers=["furn"]),
+        *[dict(op="desk", rect=[x0, y0, round(x0 + 0.75, 2), y1], top=0.75)
+          for x0 in (18.2, 19.75) for y0, y1 in ((12.5, 14.55), (15.15, 17.15))],
+        *[op for x0, y0, y1 in (
+            (18.2, 12.5, 14.55), (18.2, 15.15, 17.15), (19.75, 12.5, 14.55), (19.75, 15.15, 17.15),   # new
+            (21.45, 12.5, 14.55), (21.45, 15.15, 17.15),                                               # existing
+            (23.0, 9.9, 11.9), (23.0, 12.5, 14.55), (23.0, 15.15, 17.15),
+            (24.55, 9.9, 11.9), (24.55, 12.5, 14.55), (24.55, 15.15, 17.15))
+          for dy in (-0.5, 0.5)
+          for op in (dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round((y0 + y1) / 2 + dy, 3), top=0.75, yaw=3.1416),)],
+    ],
+    "8F": [
+        # 805 의생물공정실습실: 15 benches (3 rows x 5) with an Agilent 1260 HPLC each (studyHPLC1260 model),
+        # instrument fronts face south (-y) toward the aisle
+        dict(op="clear", rect=[10.4, 7.9, 23.4, 15.3], layers=["furn"]),
+        *_lab_grid(11.8, 22.9, 8.6, 14.8, cols=5, rows=3, w=1.5, d=0.9, model="hplc1260", yaw=-1.5708),
     ],
 }
 
@@ -311,6 +358,13 @@ def rect_mask(box, pad=0.0):
     return m
 
 
+def desk_mask(rects):
+    m = np.zeros((NY, NX), bool)
+    for r in rects:
+        m |= rect_mask(r)
+    return m
+
+
 def greedy_rects(mask):
     """Merge set cells into maximal-ish axis aligned rectangles."""
     mask = mask.copy()
@@ -389,6 +443,8 @@ def main():
                 wall &= ~door; part &= ~door
 
         rooms = list(ROOMS.get(lv["id"], []))
+        desks, equipment = [], []
+        solid = np.zeros((NY, NX), bool)
         for e in EDITS.get(lv["id"], []):
             if e["op"] == "clear":
                 m = rect_mask(e["rect"])
@@ -400,6 +456,14 @@ def main():
                 wall |= m; part &= ~m; furn &= ~m
             elif e["op"] == "rooms":
                 rooms = [(e.get("rename", {}).get(n, n), x, y) for n, x, y in rooms if n not in e.get("drop", [])]
+            elif e["op"] == "desk":
+                m = rect_mask(e["rect"])
+                furn |= m; wall &= ~m; part &= ~m
+                desks.append(e["rect"])
+            elif e["op"] == "solid":
+                solid |= rect_mask(e["rect"])
+            elif e["op"] == "equip":
+                equipment.append(dict(model=e["model"], x=e["x"], y=e["y"], top=e["top"], yaw=e["yaw"]))
 
         if lv["id"] == "8F":
             fp = fp_8f            # set-back envelope; the rest is roof terrace
@@ -413,7 +477,7 @@ def main():
         int_wall = wall & ~facade_wall
         int_glass = part & ~facade_glass
 
-        occ = (wall | part | furn)
+        occ = (wall | part | furn | solid)
         # ROS map_server style: 0 = occupied, 254 = free, 205 = unknown
         img = np.full((NY, NX), 205, np.uint8)
         walk = fp if lv["id"] != "8F" else fp_common
@@ -429,9 +493,10 @@ def main():
         rec.update(
             walls=greedy_rects(int_wall), facade=greedy_rects(facade_wall),
             glass=greedy_rects(int_glass), facadeGlass=greedy_rects(facade_glass),
-            furniture=greedy_rects(furn), footprint=greedy_rects(fp),
+            furniture=greedy_rects(furn & ~desk_mask(desks)) + desks, footprint=greedy_rects(fp),
             terrace=greedy_rects(fp_common & ~fp_8f) if lv["id"] == "8F" else [],
             rooms=[dict(name=n, x=x, y=y) for n, x, y in rooms],
+            equipment=equipment,
             map=f"maps/{lv['id']}.png",
         )
         levels_out.append(rec)
@@ -444,8 +509,20 @@ def main():
                   source="2015-12-14 interior plans IP-01..IP-28 (1:100)"),
         levels=levels_out, stairs=STAIRS, elevators=ELEVATORS,
     )
-    with open(os.path.join(out, "building.json"), "w", encoding="utf-8") as f:
+    # atomic write (a dev server may be reading the old file at the same moment on Windows)
+    target = os.path.join(out, "building.json")
+    tmp = target + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    for attempt in range(20):
+        try:
+            os.replace(tmp, target)
+            break
+        except OSError:
+            import time
+            time.sleep(0.25)
+    else:
+        raise OSError("could not replace " + target)
     print("wrote", os.path.join(out, "building.json"))
 
 

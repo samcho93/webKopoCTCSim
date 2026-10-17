@@ -14,6 +14,9 @@ import { Robot } from './robots.js';
 import { RosBridge } from './rosbridge.js';
 import { TikiLink } from './tikiLink.js';
 import { loadRobotModels } from './urdfModels.js';
+import { Equipment } from './equipment.js';
+import { DisplayRobots } from './displayRobots.js';
+import { CafeStation } from './cafeStation.js';
 import { toWorld } from './geo.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -114,6 +117,7 @@ async function main() {
   const router = new Router(building, grids);
   await loadRobotModels();   // TIKI-mini + Go2 URDF packages
 
+
   const events = new Emitter();
   const sim = { scene, building, world, elevators, grids, router, robots: [], events, time: 0, timeScale: 1, epoch: Date.now() / 1000 - performance.now() / 1000 };
   const ros = new RosBridge(sim);
@@ -213,8 +217,9 @@ async function main() {
   });
   window.addEventListener('pointerup', () => { drag.down = false; });
   canvas.addEventListener('click', (ev) => {
-    if (state.mode === 'walk') { if (drag.moved <= 6) walkTo(ev); }
-    else pickFloor(ev);
+    if (state.mode === 'walk') { if (drag.moved <= 6 && !clickExhibit(ev, 6)) walkTo(ev); }
+    else if (state.goalMode || state.placing) pickFloor(ev);
+    else clickExhibit(ev);
   });
   function walkTo(ev) {
     const r = canvas.getBoundingClientRect();
@@ -583,6 +588,7 @@ async function main() {
   // fixed-step simulation (decoupled from rendering, keeps running in hidden tabs)
   const STEP = 1 / 60;
   let acc = 0, last = performance.now();
+  let exhibitT = 0;
   function stepSim(dt) {
     for (const e of elevators) e.update(dt);
     const K = walker.keys, r = state.selected;
@@ -591,6 +597,10 @@ async function main() {
       r.tasks = []; r.setCmd(((K.i ? 1 : 0) - (K.k ? 1 : 0)) * r.P.vmax * 0.8, ((K.j ? 1 : 0) - (K.l ? 1 : 0)) * r.P.wmax * 0.7, 0.15);
     }
     for (const rb of sim.robots) rb.update(dt);
+    exhibitT += dt;
+    equipment.update(dt, walker.active ? { level: building.levelAt(walker.body.pos.z).id, x: walker.body.pos.x, y: walker.body.pos.y } : null);
+    displays.update(dt);
+    for (const c of cafes) c.update(dt, exhibitT);
     sim.time += dt;
   }
   function advance() {
@@ -665,6 +675,35 @@ async function main() {
   }
 
   // ------------------------------------------------------------ public API (scripting / automated tests)
+  // ------------------------------------------------------------ equipment / exhibits (building.json level.equipment)
+  const equipment = new Equipment(building, { onToast: (m) => toast(m) });     // 8F 805: HPLC 1260 stacks
+  equipment.load().catch((e) => console.warn('HPLC load failed', e));
+  const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
+  displays.load();
+  const cafes = [];                                                            // 3F 305: M400 robot cafe
+  for (const lv of building.levels) for (const e of lv.equipment || []) {
+    if (e.model !== 'm400-robot-cafe') continue;
+    try { cafes.push(new CafeStation(building, { level: lv.id, x: e.x, y: e.y }, { onToast: (m) => toast(m) })); } catch (err) { console.warn('cafe failed', err); }
+  }
+  /** Click on an exhibit: HPLC (activate / doors / valves), Go2 display, cafe (order). */
+  function clickExhibit(ev, maxDist = 40) {
+    const r = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const targets = [...equipment.pickables, ...displays.pickables, ...cafes.map((c) => c.scene)].filter((o) => { let p = o; while (p) { if (!p.visible) return false; p = p.parent; } return true; });
+    const hits = raycaster.intersectObjects(targets, true).filter((h) => h.distance < maxDist);
+    if (!hits.length) return false;
+    // the wall between camera and exhibit wins
+    const wall = world.sensorBVH.raycastFirst(raycaster.ray, THREE.DoubleSide);
+    if (wall && wall.distance < hits[0].distance - 0.05 && state.mode === 'walk') return false;
+    const h = hits[0];
+    if (equipment.click(h) || displays.click(h)) return true;
+    const cafe = cafes.find((c) => { let p = h.object; while (p) { if (p === c.scene) return true; p = p.parent; } return false; });
+    if (cafe) { if (!cafe.robotReady) toast('로봇 카페 준비 중…'); else if (!cafe.order()) toast(`제조 중 — ${cafe.robot.status}`); return true; }
+    return false;
+  }
+  sim.equipment = equipment; sim.displays = displays; sim.cafes = cafes;
+
   Object.assign(sim, {
     setMode, spawn, selectRobot, teleport, toast,
     goTo: (id, level, x, y) => sim.robots.find((q) => q.id === id)?.goTo(level, x, y),

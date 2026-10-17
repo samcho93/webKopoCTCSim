@@ -51,6 +51,17 @@ python tools/extract_floorplans.py "<평면도.pdf>" public/data
 * three.js: `X = x`, `Y = z`, `Z = -y`.
 * ROS(REP-103) 메시지는 평면 좌표 그대로 사용하며, 층별 맵 프레임은 `map_<층ID>` (예: `map_3F`) 입니다.
 
+## 전시 · 장비 (building.json `equipment`, 추출기 `EDITS`로 배치)
+
+| 위치 | 내용 | 동작 |
+|---|---|---|
+| 3F 305 프로젝트실 #4 (복도쪽 벽) | **M400 로봇 카페** — [samcho93/cafesim](https://github.com/samcho93/cafesim) 시뮬레이터 그대로 (`src/vendor/cafesim`) | 커피머신·제빙기·컵 디스펜서·결제 단말 프로토콜 + UR5e(studyUR) 컵 이동: 컵 → 얼음 → 추출 → 픽업 테이블. 45초마다 자동 주문, 카페 클릭 = 주문 |
+| 8F 805 의생물공정실습실 | 실험대 15개(3×5) + **Agilent 1260 HPLC** ([studyHPLC1260](https://github.com/samcho93/studyHPLC1260) URDF·재질) | 클릭(또는 1인칭으로 다가가면) 실물 모델로 전환 → 모듈 앞 덮개·MCT 문 열기(내부 보임), 퍼지/주입 밸브, 니들 주입 동작 |
+| 3F 302 프로젝트실 #2 | **Go2** 전시 10대 | 클릭하면 제자리 걷기 5회 후 정지 (전시용, 시뮬 로봇 아님) |
+| 3F 308 실습실 #2 | 기둥 옆 책상 제거, 학생 책상 4개 추가(기존과 같은 0.75×2.05 m · 1.55 m 간격) → 책상 12개 모두 **TIKI-mini** 2대씩 (24대) | 전시용 (동작 없음) |
+
+장비·책상은 점유 격자(로봇 경로계획·ROS 맵)에도 반영됩니다.
+
 ## 로봇 모델 (URDF)
 
 | 시뮬 로봇 | 출처 | 파일 |
