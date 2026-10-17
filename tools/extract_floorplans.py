@@ -95,7 +95,7 @@ EDITS = {
         # parked car: Kia Carnival (5155 x 1995 x 1775 mm, wheelbase 3090), dark grey, nose-in in the
         # first marked bay (lines x 21.2 / 23.7, y 13.0-17.0)
         dict(op="equip", model="car-carnival", x=22.45, y=14.35, top=0.0, yaw=1.5708,
-             props=dict(color="#3b3e43", plate="177하 4649")),
+             props=dict(color="#2c2f33", plate="177하 4649")),
         dict(op="solid", rect=[21.4, 11.7, 23.5, 17.0]),
     ],
     "3F": [

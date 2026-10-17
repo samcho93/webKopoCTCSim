@@ -685,7 +685,7 @@ async function main() {
   equipment.load().catch((e) => console.warn('HPLC load failed', e));
   const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
   displays.load();
-  placeCars(building);                                                        // 1F parking: Kia Carnival
+  placeCars(building).catch((e) => console.warn('car', e));                   // 1F parking: Kia Carnival
   const arms = new DeskArms(building);                                         // 3F 306 reBot Arm / 308 SO-ARM101 on desks
   arms.load().catch((e) => console.warn('desk arms', e));
   let aurens = [];                                                            // 3F 305: VALEM machines, live firmware

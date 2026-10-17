@@ -1,0 +1,5 @@
+Kia Carnival 3D model
+"Kia Carnival" by Nieve5677 (https://sketchfab.com/niev)
+Source: https://sketchfab.com/3d-models/kia-carnival-85cc817cc9984fafb879760df5af3ae8
+License: CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: meshes merged per material, decimated to ~233k triangles, scaled to 5155 mm and re-oriented by tools/build_car.py; materials, paint colour (dark grey) and licence plates replaced at runtime by src/parkedCar.js.
