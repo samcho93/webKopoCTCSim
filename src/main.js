@@ -140,8 +140,8 @@ async function main() {
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms);
   }
 
-  function setMode(mode, level = state.level) {
-    const prev = state.mode;
+  function setMode(mode, level = state.level, { keepCamera = false } = {}) {
+    const prev = state.mode, prevElev = building.byId[state.level].elevation;
     state.mode = mode; state.level = level;
     if (mode !== 'walk' && prev === 'walk') exitWalk();
     building.setView(mode, mode === 'exterior' ? null : level);
@@ -150,7 +150,11 @@ async function main() {
     document.querySelectorAll('#levels button').forEach((b) => b.classList.toggle('on', b.dataset.level === level && mode !== 'exterior'));
     $('walkHelp').classList.toggle('hidden', mode !== 'walk');
     if (mode === 'walk') enterWalk(level);
-    else if (mode === 'cutaway' || mode === 'single') {
+    else if ((mode === 'cutaway' || mode === 'single') && keepCamera) {
+      // follow a level change without re-framing: just lift / lower the view by the storey height
+      const dz = building.byId[level].elevation - prevElev;
+      orbit.target.y += dz; camera.position.y += dz;
+    } else if (mode === 'cutaway' || mode === 'single') {
       const lv = building.byId[level];
       const tgt = new THREE.Vector3(13.5, lv.elevation, -8.6);
       const off = camera.position.clone().sub(orbit.target);
@@ -161,6 +165,23 @@ async function main() {
     }
     renderRooms();
     drawMinimapBase();
+  }
+
+  // When the selected robot reaches another floor (elevator stop, top of a stair flight),
+  // load that floor in the view: cutaway/single switch level, the exterior view opens a cutaway.
+  let robotLevelSeen = null;
+  function followRobotLevel(r) {
+    if (!r) { robotLevelSeen = null; return; }
+    const ride = r.body.ride;
+    if (ride && ride.v !== 0) return;                 // wait until the lift car has stopped
+    const id = r.level.id;
+    if (robotLevelSeen === null || robotLevelSeen.robot !== r) { robotLevelSeen = { robot: r, id }; return; }
+    if (id === robotLevelSeen.id) return;
+    robotLevelSeen.id = id;
+    if (id === state.level && state.mode !== 'exterior') return;
+    const mode = state.mode === 'single' ? 'single' : 'cutaway';
+    setMode(mode, id, { keepCamera: state.mode !== 'exterior' && !state.follow });
+    toast(`${r.name} → ${id} ${building.byId[id].name}`);
   }
 
   // ------------------------------------------------------------ walk mode
@@ -589,8 +610,8 @@ async function main() {
       if (state.follow && r) {
         const t = toWorld(r.body.pos.x, r.body.pos.y, r.body.pos.z + 0.5);
         const d = t.clone().sub(orbit.target); orbit.target.add(d); camera.position.add(d);
-        if (state.mode !== 'exterior' && r.level.id !== state.level) setMode(state.mode, r.level.id);
       }
+      followRobotLevel(r);
       orbit.update();
     }
     renderer.clippingPlanes = building.clipPlanes || [];
