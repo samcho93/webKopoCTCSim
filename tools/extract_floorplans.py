@@ -73,11 +73,12 @@ ELEVATORS = [
 #   rooms  : drop / rename room labels
 EDITS = {
     "3F": [
-        # 307 준비실 merged into 308 실습실 #2
+        # 307 준비실 merged into 308 실습실 #2: the 307 doorway stays as the front door,
+        # the 308 doorway is walled up and a new rear door opens at the east end of 308
         dict(op="clear", rect=[17.8, 9.95, 19.5, 17.2], layers=["furn"]),              # 307 table + counter
-        dict(op="clear", rect=[19.42, 9.95, 19.9, 16.9], layers=["wall", "part"]),     # 307|308 partition (+ door jambs)
-        dict(op="clear", rect=[17.8, 9.9, 19.42, 10.95], layers=["part"]),            # old 307 door frame stubs
-        dict(op="wall", rect=[17.85, 9.7, 19.45, 9.9]),                               # old 307 doorway -> corridor wall
+        dict(op="clear", rect=[19.42, 9.95, 19.9, 16.9], layers=["wall", "part"]),     # 307|308 partition (+ 308 door jamb)
+        dict(op="wall", rect=[19.75, 9.7, 20.85, 9.9]),                               # old 308 doorway -> corridor wall
+        dict(op="clear", rect=[25.4, 9.6, 26.3, 9.95], layers=["wall", "part", "furn"]),  # new rear door of 308
         dict(op="rooms", drop=["307 준비실"], rename={"308 실습실 #2": "308 실습실 #2 (구 307 준비실 통합)"}),
     ],
 }
