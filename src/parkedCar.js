@@ -12,7 +12,7 @@ import { toWorld } from './geo.js';
 
 const URL = `${import.meta.env.BASE_URL}equipment/car/carnival.glb`;
 const L = 5.155, W = 1.995;
-const PLATE_Y = { front: 0.56, rear: 0.8 };       // plate centre heights (m), from the KA4 front / rear views
+const PLATE_Y = { front: 0.56, rear: 0.98 };      // plate centre heights (m); rear = halfway between the KIA logo (1.16) and 0.80
 
 function canvasTex(w, h, draw) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -20,13 +20,33 @@ function canvasTex(w, h, draw) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
-/** Korean private-car plate (520 x 110 mm, white, black text). */
+/**
+ * Korean eco-friendly (electric / hydrogen) plate, 520 x 110 mm: sky-blue gradient, black characters,
+ * EV emblem (a blue roundel with a car and a plug) at the left.
+ */
 const plateMap = (text) => canvasTex(1040, 220, (g, w, h) => {
-  g.fillStyle = '#f7f8f6'; g.fillRect(0, 0, w, h);
-  g.strokeStyle = '#1b1b1b'; g.lineWidth = 10; g.strokeRect(10, 10, w - 20, h - 20);
-  g.fillStyle = '#111'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const bg = g.createLinearGradient(0, 0, w, 0);
+  bg.addColorStop(0, '#2f86d6'); bg.addColorStop(0.22, '#79b8ea'); bg.addColorStop(0.6, '#cfe7f8'); bg.addColorStop(1, '#e6f3fc');
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  const sheen = g.createLinearGradient(0, 0, 0, h);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.35)'); sheen.addColorStop(0.5, 'rgba(255,255,255,0)'); sheen.addColorStop(1, 'rgba(0,40,90,0.12)');
+  g.fillStyle = sheen; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#123a5e'; g.lineWidth = 8; g.strokeRect(8, 8, w - 16, h - 16);
+  // EV emblem: roundel, car silhouette, plug
+  const cx = 82, cy = h / 2, r = 58;
+  const rg = g.createRadialGradient(cx - 18, cy - 18, 6, cx, cy, r);
+  rg.addColorStop(0, '#9fd3ff'); rg.addColorStop(1, '#0d5aa7');
+  g.fillStyle = rg; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#e8f4ff'; g.lineWidth = 4; g.stroke();
+  g.fillStyle = '#ffffff';
+  g.beginPath(); g.moveTo(cx - 34, cy + 12); g.lineTo(cx - 30, cy - 4); g.lineTo(cx - 16, cy - 20); g.lineTo(cx + 16, cy - 20); g.lineTo(cx + 30, cy - 4);
+  g.lineTo(cx + 34, cy + 12); g.closePath(); g.fill();
+  g.fillStyle = '#0d5aa7'; g.fillRect(cx - 12, cy - 16, 24, 12);
+  g.fillStyle = '#ffffff'; for (const dx of [-20, 20]) { g.beginPath(); g.arc(cx + dx, cy + 14, 8, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#ffe14d'; g.beginPath(); g.moveTo(cx + 4, cy - 46); g.lineTo(cx - 8, cy - 26); g.lineTo(cx + 1, cy - 26); g.lineTo(cx - 4, cy - 12); g.lineTo(cx + 10, cy - 32); g.lineTo(cx + 1, cy - 32); g.closePath(); g.fill();
+  g.fillStyle = '#0b0b0b'; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.font = '700 168px "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-  g.fillText(text, w / 2, h / 2 + 8, w - 70);
+  g.fillText(text, (w + 150) / 2, h / 2 + 8, w - 190);
 });
 const contactShadow = () => canvasTex(256, 128, (g, w, h) => {
   const r = g.createRadialGradient(w / 2, w / 2, 4, w / 2, w / 2, w / 2);
