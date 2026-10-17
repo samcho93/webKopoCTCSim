@@ -21,32 +21,44 @@ function canvasTex(w, h, draw) {
   return t;
 }
 /**
- * Korean eco-friendly (electric / hydrogen) plate, 520 x 110 mm: sky-blue gradient, black characters,
- * EV emblem (a blue roundel with a car and a plug) at the left.
+ * Korean licence plate, 520 x 110 mm, current style: white field, black characters, black rim, and a
+ * blue band at the left with the round emblem and "KOR".
  */
 const plateMap = (text) => canvasTex(1040, 220, (g, w, h) => {
-  const bg = g.createLinearGradient(0, 0, w, 0);
-  bg.addColorStop(0, '#2f86d6'); bg.addColorStop(0.22, '#79b8ea'); bg.addColorStop(0.6, '#cfe7f8'); bg.addColorStop(1, '#e6f3fc');
-  g.fillStyle = bg; g.fillRect(0, 0, w, h);
-  const sheen = g.createLinearGradient(0, 0, 0, h);
-  sheen.addColorStop(0, 'rgba(255,255,255,0.35)'); sheen.addColorStop(0.5, 'rgba(255,255,255,0)'); sheen.addColorStop(1, 'rgba(0,40,90,0.12)');
-  g.fillStyle = sheen; g.fillRect(0, 0, w, h);
-  g.strokeStyle = '#123a5e'; g.lineWidth = 8; g.strokeRect(8, 8, w - 16, h - 16);
-  // EV emblem: roundel, car silhouette, plug
-  const cx = 82, cy = h / 2, r = 58;
-  const rg = g.createRadialGradient(cx - 18, cy - 18, 6, cx, cy, r);
-  rg.addColorStop(0, '#9fd3ff'); rg.addColorStop(1, '#0d5aa7');
-  g.fillStyle = rg; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = '#e8f4ff'; g.lineWidth = 4; g.stroke();
-  g.fillStyle = '#ffffff';
-  g.beginPath(); g.moveTo(cx - 34, cy + 12); g.lineTo(cx - 30, cy - 4); g.lineTo(cx - 16, cy - 20); g.lineTo(cx + 16, cy - 20); g.lineTo(cx + 30, cy - 4);
-  g.lineTo(cx + 34, cy + 12); g.closePath(); g.fill();
-  g.fillStyle = '#0d5aa7'; g.fillRect(cx - 12, cy - 16, 24, 12);
-  g.fillStyle = '#ffffff'; for (const dx of [-20, 20]) { g.beginPath(); g.arc(cx + dx, cy + 14, 8, 0, Math.PI * 2); g.fill(); }
-  g.fillStyle = '#ffe14d'; g.beginPath(); g.moveTo(cx + 4, cy - 46); g.lineTo(cx - 8, cy - 26); g.lineTo(cx + 1, cy - 26); g.lineTo(cx - 4, cy - 12); g.lineTo(cx + 10, cy - 32); g.lineTo(cx + 1, cy - 32); g.closePath(); g.fill();
-  g.fillStyle = '#0b0b0b'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = '700 168px "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
-  g.fillText(text, (w + 150) / 2, h / 2 + 8, w - 190);
+  const round = (x, y, ww, hh, r) => { g.beginPath(); g.roundRect(x, y, ww, hh, r); };
+  g.fillStyle = '#0d0d0f'; round(0, 0, w, h, 26); g.fill();                     // black rim
+  g.fillStyle = '#f6f7f6'; round(14, 14, w - 28, h - 28, 16); g.fill();         // white field
+  // blue band
+  const bw = 118;
+  g.save(); round(14, 14, w - 28, h - 28, 16); g.clip();
+  const bg = g.createLinearGradient(14, 0, 14 + bw, 0);
+  bg.addColorStop(0, '#0a3d9c'); bg.addColorStop(1, '#1d63d1');
+  g.fillStyle = bg; g.fillRect(14, 14, bw, h - 28);
+  g.restore();
+  // round emblem (two interlocking halves) with a white rim
+  const cx = 14 + bw / 2, cy = 72, r = 38;
+  g.fillStyle = '#e9eef6'; g.beginPath(); g.arc(cx, cy, r + 4, 0, Math.PI * 2); g.fill();
+  g.save(); g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.clip();
+  g.fillStyle = '#1e5fc4'; g.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+  g.fillStyle = '#5aa0ee'; g.beginPath(); g.arc(cx, cy, r, Math.PI, 0); g.arc(cx + r / 2, cy, r / 2, 0, Math.PI, false); g.arc(cx - r / 2, cy, r / 2, 0, Math.PI, true); g.fill();
+  const sh = g.createRadialGradient(cx - 14, cy - 16, 2, cx, cy, r); sh.addColorStop(0, 'rgba(255,255,255,0.55)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sh; g.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+  g.restore();
+  g.fillStyle = '#cfe2ff'; g.font = 'italic 800 40px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('KOR', cx, 160);
+  // characters: tall condensed bold, the Hangul syllable a little narrower
+  const m = /^(\d+)\s*(\S)\s*(\d+)$/.exec(text.trim()) || [null, text, '', ''];
+  const x0 = 14 + bw + 26, x1 = w - 40, fs = 200;
+  g.fillStyle = '#0b0b0b'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  const parts = [[m[1], 1.0], [m[2], 0.9], [m[3], 1.0]];
+  g.font = `700 ${fs}px "Arial Narrow", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
+  const gap = 34, widths = parts.map(([t, k]) => g.measureText(t).width * k);
+  const sx = (x1 - x0) / (widths.reduce((a, b) => a + b, 0) + gap * (parts.length - 1));
+  let x = x0;
+  parts.forEach(([t, k], i) => {
+    g.save(); g.translate(x, 184); g.scale(sx * k, 1); g.fillText(t, 0, 0); g.restore();
+    x += (widths[i] + gap) * sx;
+  });
 });
 const contactShadow = () => canvasTex(256, 128, (g, w, h) => {
   const r = g.createRadialGradient(w / 2, w / 2, 4, w / 2, w / 2, w / 2);
@@ -100,19 +112,27 @@ async function loadTemplate() {
   return template;
 }
 
-/** Ray-casts a plate onto the body at height y, on the front (dir +1) or rear (dir -1) centre line. */
+/**
+ * Mounts a plate on the front (dir +1) or rear (dir -1) centre line at height y: rays over the whole plate
+ * area find the body surface, and the plate is set flat and upright (facing straight out) just in front of
+ * the point that sticks out most — so none of it sinks into the curved bumper / tailgate.
+ */
 function addPlate(car, mat, dir, y) {
   const solid = [];
   car.traverse((o) => { if (o.isMesh && !o.material.transparent) solid.push(o); });
   car.updateMatrixWorld(true);
-  const rc = new THREE.Raycaster(new THREE.Vector3(dir * (L / 2 + 1), y, 0), new THREE.Vector3(-dir, 0, 0), 0, 2);
-  const hit = rc.intersectObjects(solid, false)[0];
-  const x = hit ? hit.point.x : dir * (L / 2 - 0.05);
-  const n = hit?.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new THREE.Vector3(dir, 0, 0);
-  n.y = 0; n.normalize();
+  const rc = new THREE.Raycaster();
+  let out = null;
+  for (const dz of [-0.26, -0.13, 0, 0.13, 0.26]) for (const dy of [-0.055, 0, 0.055]) {
+    rc.set(new THREE.Vector3(dir * (L / 2 + 1), y + dy, dz), new THREE.Vector3(-dir, 0, 0));
+    rc.far = 1.6;
+    const hit = rc.intersectObjects(solid, false)[0];
+    if (hit && (out === null || hit.point.x * dir > out * dir)) out = hit.point.x;
+  }
+  if (out === null) out = dir * (L / 2 - 0.05);
   const p = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.11), mat);
-  p.position.set(x + n.x * 0.006, y, 0);
-  p.lookAt(p.position.clone().add(n));
+  p.position.set(out + dir * 0.008, y, 0);
+  p.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
   car.add(p);
 }
 
