@@ -67,6 +67,22 @@ ELEVATORS = [
 ]
 
 # Room labels (centre points, plan metres), transcribed from the sheets.
+# Renovations applied on top of the 2015 drawings (plan metres, [x0, y0, x1, y1]).
+#   clear  : remove walls / partitions / furniture inside the rect (layers: wall, part, furn)
+#   wall   : add a solid wall
+#   rooms  : drop / rename room labels
+EDITS = {
+    "3F": [
+        # 307 준비실 merged into 308 실습실 #2
+        dict(op="clear", rect=[17.8, 9.95, 19.5, 17.2], layers=["furn"]),              # 307 table + counter
+        dict(op="clear", rect=[19.42, 9.95, 19.9, 16.9], layers=["wall", "part"]),     # 307|308 partition (+ door jambs)
+        dict(op="clear", rect=[17.8, 9.9, 19.42, 10.95], layers=["part"]),            # old 307 door frame stubs
+        dict(op="wall", rect=[17.85, 9.7, 19.45, 9.9]),                               # old 307 doorway -> corridor wall
+        dict(op="rooms", drop=["307 준비실"], rename={"308 실습실 #2": "308 실습실 #2 (구 307 준비실 통합)"}),
+    ],
+}
+
+
 ROOMS = {
     "B1": [("MDF실", 1.7, 14.4), ("휴게실", 5.1, 14.4), ("전기실", 10.2, 14.4),
            ("발전기실", 1.3, 8.7), ("기계실", 9.5, 6.1), ("강당", 19.4, 12.3),
@@ -371,6 +387,19 @@ def main():
                 door = rect_mask([e["doorX"] - 0.2, e["door"][0], e["doorX"] + 0.35, e["door"][1]])
                 wall &= ~door; part &= ~door
 
+        rooms = list(ROOMS.get(lv["id"], []))
+        for e in EDITS.get(lv["id"], []):
+            if e["op"] == "clear":
+                m = rect_mask(e["rect"])
+                if "wall" in e["layers"]: wall &= ~m
+                if "part" in e["layers"]: part &= ~m
+                if "furn" in e["layers"]: furn &= ~m
+            elif e["op"] == "wall":
+                m = rect_mask(e["rect"])
+                wall |= m; part &= ~m; furn &= ~m
+            elif e["op"] == "rooms":
+                rooms = [(e.get("rename", {}).get(n, n), x, y) for n, x, y in rooms if n not in e.get("drop", [])]
+
         if lv["id"] == "8F":
             fp = fp_8f            # set-back envelope; the rest is roof terrace
         elif lv["id"] in ("B1", "1F"):
@@ -401,7 +430,7 @@ def main():
             glass=greedy_rects(int_glass), facadeGlass=greedy_rects(facade_glass),
             furniture=greedy_rects(furn), footprint=greedy_rects(fp),
             terrace=greedy_rects(fp_common & ~fp_8f) if lv["id"] == "8F" else [],
-            rooms=[dict(name=n, x=x, y=y) for n, x, y in ROOMS.get(lv["id"], [])],
+            rooms=[dict(name=n, x=x, y=y) for n, x, y in rooms],
             map=f"maps/{lv['id']}.png",
         )
         levels_out.append(rec)
