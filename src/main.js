@@ -16,6 +16,7 @@ import { TikiLink } from './tikiLink.js';
 import { loadRobotModels } from './urdfModels.js';
 import { Equipment } from './equipment.js';
 import { DisplayRobots } from './displayRobots.js';
+import { placeCars } from './parkedCar.js';
 import { CafeStation } from './cafeStation.js';
 import { createAurenStations } from './aurenStations.js';
 import { toWorld } from './geo.js';
@@ -682,6 +683,7 @@ async function main() {
   equipment.load().catch((e) => console.warn('HPLC load failed', e));
   const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
   displays.load();
+  placeCars(building);                                                        // 1F parking: Kia Carnival
   let aurens = [];                                                            // 3F 305: VALEM machines, live firmware
   createAurenStations(building, (m) => toast(m)).then((a) => { aurens = a; }).catch((e) => console.warn('AurenSim stations', e));
   const cafes = [];                                                            // 3F 305: M400 robot cafe

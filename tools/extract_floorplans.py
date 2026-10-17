@@ -91,6 +91,13 @@ def _lab_grid(x0, x1, y0, y1, cols, rows, w, d, model, yaw):
 
 
 EDITS = {
+    "1F": [
+        # parked car: Kia Carnival (5155 x 1995 x 1775 mm, wheelbase 3090), dark grey, nose-in in the
+        # first marked bay (lines x 21.2 / 23.7, y 13.0-17.0)
+        dict(op="equip", model="car-carnival", x=22.45, y=14.35, top=0.0, yaw=1.5708,
+             props=dict(color="#3b3e43", plate="177하 4649")),
+        dict(op="solid", rect=[21.4, 11.7, 23.5, 17.0]),
+    ],
     "3F": [
         # 307 준비실 merged into 308 실습실 #2: the 307 doorway stays as the front door,
         # the 308 doorway is walled up and a new rear door opens at the east end of 308
@@ -485,7 +492,7 @@ def main():
             elif e["op"] == "solid":
                 solid |= rect_mask(e["rect"])
             elif e["op"] == "equip":
-                equipment.append(dict(model=e["model"], x=e["x"], y=e["y"], top=e["top"], yaw=e["yaw"]))
+                equipment.append(dict(model=e["model"], x=e["x"], y=e["y"], top=e["top"], yaw=e["yaw"], **e.get("props", {})))
 
         if lv["id"] == "8F":
             fp = fp_8f            # set-back envelope; the rest is roof terrace
