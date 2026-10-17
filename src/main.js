@@ -17,7 +17,7 @@ import { loadRobotModels } from './urdfModels.js';
 import { Equipment } from './equipment.js';
 import { DisplayRobots } from './displayRobots.js';
 import { CafeStation } from './cafeStation.js';
-import { placeAurenShowpieces } from './aurenShowpieces.js';
+import { createAurenStations } from './aurenStations.js';
 import { toWorld } from './geo.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -602,6 +602,7 @@ async function main() {
     equipment.update(dt, walker.active ? { level: building.levelAt(walker.body.pos.z).id, x: walker.body.pos.x, y: walker.body.pos.y } : null);
     displays.update(dt);
     for (const c of cafes) c.update(dt, exhibitT);
+    for (const a of aurens) a.update(dt);
     sim.time += dt;
   }
   function advance() {
@@ -681,7 +682,8 @@ async function main() {
   equipment.load().catch((e) => console.warn('HPLC load failed', e));
   const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
   displays.load();
-  placeAurenShowpieces(building, { onToast: (m) => toast(m) }).catch((e) => console.warn('AurenSim showpieces', e));   // 3F 302: VALEM machines
+  let aurens = [];                                                            // 3F 305: VALEM machines, live firmware
+  createAurenStations(building, (m) => toast(m)).then((a) => { aurens = a; }).catch((e) => console.warn('AurenSim stations', e));
   const cafes = [];                                                            // 3F 305: M400 robot cafe
   for (const lv of building.levels) for (const e of lv.equipment || []) {
     if (e.model !== 'm400-robot-cafe') continue;
@@ -692,7 +694,7 @@ async function main() {
     const r = canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    const targets = [...equipment.pickables, ...displays.pickables, ...cafes.map((c) => c.scene)].filter((o) => { let p = o; while (p) { if (!p.visible) return false; p = p.parent; } return true; });
+    const targets = [...equipment.pickables, ...displays.pickables, ...cafes.map((c) => c.scene), ...aurens.map((a) => a.root).filter(Boolean)].filter((o) => { let p = o; while (p) { if (!p.visible) return false; p = p.parent; } return true; });
     const hits = raycaster.intersectObjects(targets, true).filter((h) => h.distance < maxDist);
     if (!hits.length) return false;
     // the wall between camera and exhibit wins
@@ -700,11 +702,14 @@ async function main() {
     if (wall && wall.distance < hits[0].distance - 0.05 && state.mode === 'walk') return false;
     const h = hits[0];
     if (equipment.click(h) || displays.click(h)) return true;
+    const machine = aurens.find((a) => { let p = h.object; while (p) { if (p === a.root) return true; p = p.parent; } return false; });
+    if (machine) return machine.click(h);
     const cafe = cafes.find((c) => { let p = h.object; while (p) { if (p === c.scene) return true; p = p.parent; } return false; });
     if (cafe) { if (!cafe.robotReady) toast('로봇 카페 준비 중…'); else if (!cafe.order()) toast(`제조 중 — ${cafe.robot.status}`); return true; }
     return false;
   }
   sim.equipment = equipment; sim.displays = displays; sim.cafes = cafes;
+  Object.defineProperty(sim, 'aurens', { get: () => aurens });
 
   Object.assign(sim, {
     setMode, spawn, selectRobot, teleport, toast,

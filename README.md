@@ -59,7 +59,7 @@ python tools/extract_floorplans.py "<평면도.pdf>" public/data
 | 8F 805 의생물공정실습실 | 실험대 15개(3×5) + **Agilent 1260 HPLC** ([studyHPLC1260](https://github.com/samcho93/studyHPLC1260) URDF·재질) | 클릭(또는 1인칭으로 다가가면) 실물 모델로 전환 → 모듈 앞 덮개·MCT 문 열기(내부 보임), 퍼지/주입 밸브, 니들 주입 동작 |
 | 3F 301 프로젝트실 #1 | 책상 제거 후 **Go2** 전시 10대 (2×5) | 클릭하면 제자리 걷기 5회 후 정지 (전시용, 시뮬 로봇 아님) |
 | 3F 308 실습실 #2 | 기존 책상(0.75×2.05 m)을 가로 4 × 세로 3으로 배치(도면과 같은 방향, 열 간격 1.55 m) + 책상마다 **TIKI-mini** 2대 (24대) | 전시용 (동작 없음) |
-| 3F 302 교수연구실 | 창가 책상에 **AUREN-PRO**, 폭 좁은 테이블(ㄱ자 책상 리턴)에 **AUREN M** — [AurenSim](https://github.com/samcho93/aurensim) 모델(`src/vendor/aurensim`), 대기 화면 전시. KERNDU 자리는 비워 둠(CAD 비공개) | 전시용 |
+| 3F 305 프로젝트실 #4 (넓은 테이블) | **AUREN-PRO**·**AUREN M** 실동작 커피머신 — [AurenSim](https://github.com/samcho93/aurensim) (`src/vendor/aurensim`, 펌웨어 `public/equipment/auren`) | 머신 클릭 = 펌웨어 부팅. AUREN-PRO: ESP32-P4/S3 WASM 펌웨어 + 물리 모델, 그룹 버튼·LCD 터치·스팀 노브·컵/포터필터 클릭. AUREN M: STM32F103 에뮬레이터(BellaOneMC.elf) — 전원 ON 후 설정 메뉴에서 Water Heating=Heater On을 자동 설정, 예열 후 추출 버튼(①/②)으로 추출. AUREN-PRO는 SharedArrayBuffer가 필요해 `coi-serviceworker`로 COOP/COEP를 켭니다 |
 | 3F 302 · 303 | **교수연구실**로 변경, 304호와 같은 가구 배치(ㄱ자 책상 + PIN-UP 칸막이, 회의 테이블, 창측 수납) — 303은 출입문 쪽을 피해 좌우 대칭 | — |
 
 장비·책상은 점유 격자(로봇 경로계획·ROS 맵)에도 반영됩니다.

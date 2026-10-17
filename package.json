@@ -11,6 +11,7 @@
     "extract": "python -I tools/extract_floorplans.py"
   },
   "dependencies": {
+    "coi-serviceworker": "0.1.7",
     "n8ao": "1.10.3",
     "three": "0.180.0",
     "three-mesh-bvh": "0.9.1",
