@@ -17,6 +17,7 @@ import { loadRobotModels } from './urdfModels.js';
 import { Equipment } from './equipment.js';
 import { DisplayRobots } from './displayRobots.js';
 import { placeCars } from './parkedCar.js';
+import { RebotArms } from './rebotArms.js';
 import { CafeStation } from './cafeStation.js';
 import { createAurenStations } from './aurenStations.js';
 import { toWorld } from './geo.js';
@@ -602,6 +603,7 @@ async function main() {
     exhibitT += dt;
     equipment.update(dt, walker.active ? { level: building.levelAt(walker.body.pos.z).id, x: walker.body.pos.x, y: walker.body.pos.y } : null);
     displays.update(dt);
+    arms.update(dt);
     for (const c of cafes) c.update(dt, exhibitT);
     for (const a of aurens) a.update(dt);
     sim.time += dt;
@@ -684,6 +686,8 @@ async function main() {
   const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
   displays.load();
   placeCars(building);                                                        // 1F parking: Kia Carnival
+  const arms = new RebotArms(building);                                        // 3F 306: reBot Arm on every desk
+  arms.load().catch((e) => console.warn('reBot arms', e));
   let aurens = [];                                                            // 3F 305: VALEM machines, live firmware
   createAurenStations(building, (m) => toast(m)).then((a) => { aurens = a; }).catch((e) => console.warn('AurenSim stations', e));
   const cafes = [];                                                            // 3F 305: M400 robot cafe
@@ -712,6 +716,7 @@ async function main() {
   }
   sim.equipment = equipment; sim.displays = displays; sim.cafes = cafes;
   Object.defineProperty(sim, 'aurens', { get: () => aurens });
+  sim.arms = arms;
 
   Object.assign(sim, {
     setMode, spawn, selectRobot, teleport, toast,

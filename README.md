@@ -56,6 +56,7 @@ python tools/extract_floorplans.py "<평면도.pdf>" public/data
 | 위치 | 내용 | 동작 |
 |---|---|---|
 | 1F 주차장 (첫 번째 주차칸) | **기아 카니발** 주차 — 실제 제원(5155 × 1995 × 1775 mm, 휠베이스 3090)으로 만든 절차적 모델, 진한 회색, 번호판 177하 4649 (`src/parkedCar.js`) | 전시용(내비게이션 지도에는 장애물로 반영) |
+| 3F 306 실습실 #1 (모든 책상 16개) | **Seeed reBot Arm B601-DM** 책상마다 1대 — [studyReBotDevArm](https://github.com/samcho93/studyReBotDevArm) URDF/메시를 `tools/build_rebot.py`로 경량화(43만→3.9만 삼각형, `public/equipment/rebot`, CERN-OHL-W-2.0) | 계속 자유 동작: 관절 공간 랜덤 목표, 경로 전체가 책상 위·자기 책상 반경 0.62 m 안인지 검사, 이웃 팔과 0.2 m 이내로 다가가면 되돌아감 (`src/rebotArms.js`) |
 | 3F 305 프로젝트실 #4 (복도쪽 벽) | **M400 로봇 카페** — [samcho93/cafesim](https://github.com/samcho93/cafesim) 시뮬레이터 그대로 (`src/vendor/cafesim`) | 커피머신·제빙기·컵 디스펜서·결제 단말 프로토콜 + UR5e(studyUR) 컵 이동: 컵 → 얼음 → 추출 → 픽업 테이블. 45초마다 자동 주문, 카페 클릭 = 주문 |
 | 8F 805 의생물공정실습실 | 실험대 15개(3×5) + **Agilent 1260 HPLC** ([studyHPLC1260](https://github.com/samcho93/studyHPLC1260) URDF·재질) | 클릭(또는 1인칭으로 다가가면) 실물 모델로 전환 → 모듈 앞 덮개·MCT 문 열기(내부 보임), 퍼지/주입 밸브, 니들 주입 동작 |
 | 3F 301 프로젝트실 #1 | 책상 제거 후 **Go2** 전시 10대 (2×5) | 클릭하면 제자리 걷기 5회 후 정지 (전시용, 시뮬 로봇 아님) |

@@ -112,6 +112,13 @@ EDITS = {
         dict(op="solid", rect=[23.33, 6.45, 25.97, 7.2]),        # counter
         dict(op="solid", rect=[24.18, 5.25, 24.86, 6.23]),       # robot pedestal + pickup table
         dict(op="rooms", rename={"305 프로젝트실 #4": "305 프로젝트실 #4 · M400 로봇 카페"}),
+        # 306: one Seeed reBot Arm B601-DM in the middle of every desk (incl. the instructor desk), moving
+        # freely; the arms stay inside their own desk's reach so neighbours never meet
+        *[dict(op="equip", model="rebot-arm", x=x, y=y, top=0.75, yaw=1.5708) for x, y in (
+            (9.275, 10.9), (10.825, 10.9), (12.375, 10.9), (13.925, 10.9),
+            (7.725, 13.525), (9.275, 13.525), (10.825, 13.525), (12.375, 13.525), (13.925, 13.525), (15.475, 13.525),
+            (7.725, 16.15), (9.275, 16.15), (10.825, 16.15), (12.375, 15.675), (13.925, 15.675), (15.9, 15.975))],
+        dict(op="rooms", rename={"306 실습실 #1": "306 실습실 #1 · reBot Arm"}),
         # 301: desks removed, exhibition of 10 Unitree Go2 (display only, click = step in place 5x),
         # 2 columns x 5 rows facing the corridor door (north)
         dict(op="clear", rect=[10.95, 0.3, 13.25, 7.1], layers=["furn"]),
