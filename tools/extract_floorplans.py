@@ -74,6 +74,8 @@ ELEVATORS = [
 #   desk   : add a fixed bench/table (furniture layer -> 3D desk, collision, nav maps)
 #   equip  : place an equipment model (rendered at runtime: hplc1260, m400-robot-cafe)
 #   solid  : occupied in the nav/ROS maps only (equipment drawn at runtime, e.g. the cafe counter)
+#   copy   : copy the furniture / partition layout of one room region to another (optionally mirrored in x):
+#            src [x0,y0,x1,y1], to=[x, y] (lower-left corner of the copy), mirror=True/False
 
 
 def _lab_grid(x0, x1, y0, y1, cols, rows, w, d, model, yaw):
@@ -110,14 +112,21 @@ EDITS = {
             dict(op="equip", model="go2-display", x=x, y=y, top=0.0, yaw=1.5708),
             dict(op="solid", rect=[round(x - 0.2, 2), round(y - 0.4, 2), round(x + 0.2, 2), round(y + 0.4, 2)]))],
         dict(op="rooms", rename={"301 프로젝트실 #1": "301 프로젝트실 #1 · Go2 전시"}),
-        # 308 (merged with 307): the original desks (0.75 x 2.05 m) re-laid 3 across x 4 down; four 2.05 m desks
-        # do not fit front-to-back (room depth 7.15 m), so the long side runs across the room. Aisles of 0.6 m
-        # between desks, 0.8 m along the corridor wall for both doors; two TIKI-mini per desk (display only)
+        # 308 (merged with 307): the original desks (0.75 x 2.05 m, long side front-to-back as drawn) re-laid
+        # 4 across x 3 down at the original column pitch (1.55 m), clear of both doors; two TIKI-mini per desk
         dict(op="clear", rect=[17.9, 9.95, 26.8, 17.15], layers=["furn"]),
-        *[op for x0 in (18.7, 21.35, 24.0) for y0 in (10.75, 12.35, 13.95, 15.55) for op in (
-            dict(op="desk", rect=[x0, y0, round(x0 + 2.05, 2), round(y0 + 0.75, 2)], top=0.75),
-            dict(op="equip", model="tiki-display", x=round(x0 + 0.55, 3), y=round(y0 + 0.375, 3), top=0.75, yaw=3.1416),
-            dict(op="equip", model="tiki-display", x=round(x0 + 1.5, 3), y=round(y0 + 0.375, 3), top=0.75, yaw=3.1416))],
+        *[op for x0 in (19.7, 21.25, 22.8, 24.35) for y0 in (10.15, 12.55, 14.95) for op in (
+            dict(op="desk", rect=[x0, y0, round(x0 + 0.75, 2), round(y0 + 2.05, 2)], top=0.75),
+            dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 0.525, 3), top=0.75, yaw=3.1416),
+            dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 1.525, 3), top=0.75, yaw=3.1416))],
+        # 302 / 303 become professors' offices furnished like 304 (L desk with PIN-UP partition, meeting table,
+        # low cabinets, entrance counter). 302 (door at its west end): same layout against its east wall;
+        # 303 (door at its east end): mirrored against its west wall so the doorway stays clear.
+        dict(op="clear", rect=[13.45, 0.3, 16.75, 6.95], layers=["furn", "part"]),
+        dict(op="clear", rect=[16.9, 0.3, 20.2, 6.95], layers=["furn", "part"]),
+        dict(op="copy", src=[8.3, 0.2, 10.9, 7.25], to=[16.75 - 2.6, 0.2]),
+        dict(op="copy", src=[8.3, 0.2, 10.9, 7.25], to=[16.9, 0.2], mirror=True),
+        dict(op="rooms", rename={"302 프로젝트실 #2": "302 교수연구실", "303 프로젝트실 #3": "303 교수연구실"}),
     ],
     "8F": [
         # 805 의생물공정실습실: 15 benches (3 rows x 5) with an Agilent 1260 HPLC each (studyHPLC1260 model),
@@ -457,6 +466,16 @@ def main():
                 m = rect_mask(e["rect"])
                 furn |= m; wall &= ~m; part &= ~m
                 desks.append(e["rect"])
+            elif e["op"] == "copy":
+                x0, y0, x1, y1 = e["src"]
+                i0, j0 = int(round((x0 - X0) / RES)), int(round((y0 - Y0) / RES))
+                i1, j1 = int(round((x1 - X0) / RES)), int(round((y1 - Y0) / RES))
+                ti, tj = int(round((e["to"][0] - X0) / RES)), int(round((e["to"][1] - Y0) / RES))
+                for layer in (furn, part):
+                    patch = layer[j0:j1, i0:i1].copy()
+                    if e.get("mirror"):
+                        patch = patch[:, ::-1]
+                    layer[tj:tj + patch.shape[0], ti:ti + patch.shape[1]] |= patch
             elif e["op"] == "solid":
                 solid |= rect_mask(e["rect"])
             elif e["op"] == "equip":
