@@ -17,6 +17,7 @@ import { loadRobotModels } from './urdfModels.js';
 import { Equipment } from './equipment.js';
 import { DisplayRobots } from './displayRobots.js';
 import { CafeStation } from './cafeStation.js';
+import { placeAurenShowpieces } from './aurenShowpieces.js';
 import { toWorld } from './geo.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -680,6 +681,7 @@ async function main() {
   equipment.load().catch((e) => console.warn('HPLC load failed', e));
   const displays = new DisplayRobots(building, { onToast: (m) => toast(m) });  // 3F 302: Go2 exhibition
   displays.load();
+  placeAurenShowpieces(building, { onToast: (m) => toast(m) }).catch((e) => console.warn('AurenSim showpieces', e));   // 3F 302: VALEM machines
   const cafes = [];                                                            // 3F 305: M400 robot cafe
   for (const lv of building.levels) for (const e of lv.equipment || []) {
     if (e.model !== 'm400-robot-cafe') continue;

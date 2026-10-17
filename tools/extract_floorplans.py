@@ -127,6 +127,11 @@ EDITS = {
         dict(op="copy", src=[8.3, 0.2, 10.9, 7.25], to=[16.75 - 2.6, 0.2]),
         dict(op="copy", src=[8.3, 0.2, 10.9, 7.25], to=[16.9, 0.2], mirror=True),
         dict(op="rooms", rename={"302 프로젝트실 #2": "302 교수연구실", "303 프로젝트실 #3": "303 교수연구실"}),
+        # 302: VALEM coffee machines (AurenSim showpieces). Window-side desk (x 14.7-16.65, y 0.2-1.05):
+        # AUREN-PRO + KERNDU facing the room; the narrow L-desk return (x 16.05-16.6): AUREN M facing west
+        dict(op="equip", model="auren-pro", x=15.2, y=0.62, top=0.75, yaw=1.5708),
+        dict(op="equip", model="kerndu", x=16.2, y=0.62, top=0.75, yaw=1.5708),
+        dict(op="equip", model="auren-m", x=16.33, y=2.2, top=0.75, yaw=3.1416),
     ],
     "8F": [
         # 805 의생물공정실습실: 15 benches (3 rows x 5) with an Agilent 1260 HPLC each (studyHPLC1260 model),
