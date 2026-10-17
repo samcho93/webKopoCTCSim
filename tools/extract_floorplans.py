@@ -103,24 +103,21 @@ EDITS = {
         dict(op="solid", rect=[23.33, 6.45, 25.97, 7.2]),        # counter
         dict(op="solid", rect=[24.18, 5.25, 24.86, 6.23]),       # robot pedestal + pickup table
         dict(op="rooms", rename={"305 프로젝트실 #4": "305 프로젝트실 #4 · M400 로봇 카페"}),
-        # 302: exhibition of 10 Unitree Go2 (display only, click = step in place 5x), facing the entrance (north)
-        *[op for x in (14.3, 15.9) for y in (1.2, 2.3, 3.4, 4.5, 5.6) for op in (
+        # 301: desks removed, exhibition of 10 Unitree Go2 (display only, click = step in place 5x),
+        # 2 columns x 5 rows facing the corridor door (north)
+        dict(op="clear", rect=[10.95, 0.3, 13.25, 7.1], layers=["furn"]),
+        *[op for x in (11.55, 12.45) for y in (1.1, 2.2, 3.3, 4.4, 5.5) for op in (
             dict(op="equip", model="go2-display", x=x, y=y, top=0.0, yaw=1.5708),
             dict(op="solid", rect=[round(x - 0.2, 2), round(y - 0.4, 2), round(x + 0.2, 2), round(y + 0.4, 2)]))],
-        dict(op="rooms", rename={"302 프로젝트실 #2": "302 프로젝트실 #2 · Go2 전시"}),
-        # 308 (merged with 307): desk beside the column (grid 4, window side) removed; 4 more student desks,
-        # same size (0.75 x 2.05 m) and column pitch (1.55 m) as the existing ones; two TIKI-mini on every
-        # desk of the room (display only)
-        dict(op="clear", rect=[20.55, 15.0, 21.4, 16.8], layers=["furn"]),
-        *[dict(op="desk", rect=[x0, y0, round(x0 + 0.75, 2), y1], top=0.75)
-          for x0 in (18.2, 19.75) for y0, y1 in ((12.5, 14.55), (15.15, 17.15))],
-        *[op for x0, y0, y1 in (
-            (18.2, 12.5, 14.55), (18.2, 15.15, 17.15), (19.75, 12.5, 14.55), (19.75, 15.15, 17.15),   # new
-            (21.45, 12.5, 14.55), (21.45, 15.15, 17.15),                                               # existing
-            (23.0, 9.9, 11.9), (23.0, 12.5, 14.55), (23.0, 15.15, 17.15),
-            (24.55, 9.9, 11.9), (24.55, 12.5, 14.55), (24.55, 15.15, 17.15))
-          for dy in (-0.5, 0.5)
-          for op in (dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round((y0 + y1) / 2 + dy, 3), top=0.75, yaw=3.1416),)],
+        dict(op="rooms", rename={"301 프로젝트실 #1": "301 프로젝트실 #1 · Go2 전시"}),
+        # 308 (merged with 307): desks re-laid as a 4 x 4 grid of single student desks (0.75 x 1.0 m, the
+        # unit of the original desk pairs), column pitch 1.55 m as before, row pitch 1.7 m; front (west) strip
+        # and both doors kept clear; two TIKI-mini on every desk (display only)
+        dict(op="clear", rect=[17.9, 9.95, 26.8, 17.15], layers=["furn"]),
+        *[op for x0 in (19.7, 21.25, 22.8, 24.35) for y0 in (10.4, 12.1, 13.8, 15.5) for op in (
+            dict(op="desk", rect=[x0, y0, round(x0 + 0.75, 2), round(y0 + 1.0, 2)], top=0.75),
+            dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 0.25, 3), top=0.75, yaw=3.1416),
+            dict(op="equip", model="tiki-display", x=round(x0 + 0.375, 3), y=round(y0 + 0.75, 3), top=0.75, yaw=3.1416))],
     ],
     "8F": [
         # 805 의생물공정실습실: 15 benches (3 rows x 5) with an Agilent 1260 HPLC each (studyHPLC1260 model),

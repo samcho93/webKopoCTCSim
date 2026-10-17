@@ -714,8 +714,8 @@ async function main() {
   });
   window.sim = sim;
 
-  // initial content: one AMR waiting in the 1F lobby
-  selectRobot(spawn('amr', '1F', 8.5, 7.0, Math.PI / 2));
+  // initial content: one Go2 waiting in the 1F lobby
+  selectRobot(spawn('quadruped', '1F', 8.5, 7.0, Math.PI / 2));   // Go2 waiting in the 1F lobby
   setMode('exterior');
   $('loading').remove();
   frame();
