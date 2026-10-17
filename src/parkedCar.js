@@ -46,17 +46,18 @@ const plateMap = (text) => canvasTex(1040, 220, (g, w, h) => {
   g.restore();
   g.fillStyle = '#cfe2ff'; g.font = 'italic 800 40px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText('KOR', cx, 160);
-  // characters: tall condensed bold, the Hangul syllable a little narrower
+  // characters: tall condensed bold; the Hangul syllable a little smaller than the digits, centred on them
   const m = /^(\d+)\s*(\S)\s*(\d+)$/.exec(text.trim()) || [null, text, '', ''];
   const x0 = 14 + bw + 26, x1 = w - 40, fs = 200;
   g.fillStyle = '#0b0b0b'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-  const parts = [[m[1], 1.0], [m[2], 0.9], [m[3], 1.0]];
+  const parts = [[m[1], 1.0, 1.0], [m[2], 0.85, 0.85], [m[3], 1.0, 1.0]];   // [text, width scale, size scale]
   g.font = `700 ${fs}px "Arial Narrow", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
   const gap = 34, widths = parts.map(([t, k]) => g.measureText(t).width * k);
   const sx = (x1 - x0) / (widths.reduce((a, b) => a + b, 0) + gap * (parts.length - 1));
   let x = x0;
   parts.forEach(([t, k], i) => {
-    g.save(); g.translate(x, 184); g.scale(sx * k, 1); g.fillText(t, 0, 0); g.restore();
+    const ks = parts[i][2];
+    g.save(); g.translate(x, 184 - (1 - ks) * fs * 0.36); g.scale(sx * k, ks); g.fillText(t, 0, 0); g.restore();
     x += (widths[i] + gap) * sx;
   });
 });
