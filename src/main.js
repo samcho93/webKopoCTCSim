@@ -102,9 +102,10 @@ async function main() {
 
   const orbit = new OrbitControls(camera, canvas);
   /** Default exterior view; on narrow (portrait phone) screens the camera backs off so the whole building fits. */
+  /** >1 on narrow (portrait) screens: how much further back default views start so the building fits. */
+  const narrowFactor = () => THREE.MathUtils.clamp((1.3 / (window.innerWidth / Math.max(1, window.innerHeight))) ** 0.5, 1, 2);
   function exteriorView() {
-    const aspect = window.innerWidth / Math.max(1, window.innerHeight);
-    const f = THREE.MathUtils.clamp((1.3 / aspect) ** 0.5, 1, 2);
+    const f = narrowFactor();
     orbit.target.set(8, 12.5 + (f - 1) * 7, -6.5);
     camera.position.set(8 + 49 * f, 9.5 + (f - 1) * 3, -6.5 + 38.5 * f);
   }
@@ -168,8 +169,8 @@ async function main() {
     if (mode !== 'walk' && prev === 'walk') exitWalk();
     building.setView(mode, mode === 'exterior' ? null : level);
     for (const [id, g] of Object.entries(labelGroups)) g.visible = (mode === 'cutaway' || mode === 'single') && id === level;
-    document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
-    document.querySelectorAll('#levels button').forEach((b) => b.classList.toggle('on', b.dataset.level === level && mode !== 'exterior'));
+    document.querySelectorAll('#modes button, #pbModes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+    document.querySelectorAll('#levels button, #pbLevels button').forEach((b) => b.classList.toggle('on', b.dataset.level === level && mode !== 'exterior'));
     $('walkHelp').classList.toggle('hidden', mode !== 'walk');
     if (mode === 'walk') enterWalk(level);
     else if ((mode === 'cutaway' || mode === 'single') && keepCamera) {
@@ -180,7 +181,7 @@ async function main() {
       const lv = building.byId[level];
       const tgt = new THREE.Vector3(13.5, lv.elevation, -8.6);
       const off = camera.position.clone().sub(orbit.target);
-      if (prev === 'exterior' || prev === 'walk' || off.length() > 80) off.set(-14, 26, 22);
+      if (prev === 'exterior' || prev === 'walk' || off.length() > 80) off.set(-14, 26, 22).multiplyScalar(narrowFactor());
       orbit.target.copy(tgt); camera.position.copy(tgt).add(off);
     } else if (mode === 'exterior' && prev === 'walk') {
       exteriorView();
@@ -319,7 +320,7 @@ async function main() {
     camera.lookAt(camera.position.clone().add(dir));
     headLamp.position.copy(camera.position);
     const lv = building.levelAt(p.z);
-    if (lv.id !== state.level) { state.level = lv.id; document.querySelectorAll('#levels button').forEach((bb) => bb.classList.toggle('on', bb.dataset.level === lv.id)); renderRooms(); drawMinimapBase(); }
+    if (lv.id !== state.level) { state.level = lv.id; document.querySelectorAll('#levels button, #pbLevels button').forEach((bb) => bb.classList.toggle('on', bb.dataset.level === lv.id)); renderRooms(); drawMinimapBase(); }
   }
 
   // ------------------------------------------------------------ picking
@@ -369,13 +370,13 @@ async function main() {
   }
 
   // ------------------------------------------------------------ UI wiring
-  const lvWrap = $('levels');
-  for (const lv of building.levels) {
+  // floor buttons: side panel + the phone top bar (view mode + floor only)
+  for (const wrap of [$('levels'), $('pbLevels')]) for (const lv of building.levels) {
     const b = document.createElement('button'); b.textContent = lv.id; b.dataset.level = lv.id;
     b.onclick = () => setMode(state.mode === 'exterior' ? 'cutaway' : state.mode, lv.id);
-    lvWrap.appendChild(b);
+    wrap.appendChild(b);
   }
-  document.querySelectorAll('#modes button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+  document.querySelectorAll('#modes button, #pbModes button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
   function renderRooms() {
     const lv = building.byId[state.level];
     $('roomsLevel').textContent = `${lv.id} · ${lv.name} · 천장고 ${lv.ceiling.toFixed(1)}m`;

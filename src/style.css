@@ -85,5 +85,12 @@ footer a { color: var(--acc); }
   #walkHelp { white-space: normal; width: calc(100% - 32px); }
 }
 /* smartphones: only the 3D view (set by main.js) */
+#phoneBar { display: none; }
+body.phone #phoneBar { display: block; position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 8px; right: 8px; z-index: 6;
+  background: var(--panel); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 12px; padding: 6px; }
+body.phone #phoneBar .seg { grid-template-columns: repeat(3, 1fr); }
+body.phone #phoneBar button { font-size: 13px; padding: 8px 0; }
+body.phone #phoneBar .levels { margin-top: 6px; gap: 3px; }
+body.phone #phoneBar .levels button { padding: 7px 0; font-size: 12px; }
 body.phone #panel, body.phone #panelToggle, body.phone #minimapWrap, body.phone #pipLabel, body.phone #hud { display: none !important; }
 code { font-size: 11px; background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; }
