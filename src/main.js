@@ -101,7 +101,14 @@ async function main() {
   let useAO = true;
 
   const orbit = new OrbitControls(camera, canvas);
-  orbit.target.set(8, 12.5, -6.5);
+  /** Default exterior view; on narrow (portrait phone) screens the camera backs off so the whole building fits. */
+  function exteriorView() {
+    const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+    const f = THREE.MathUtils.clamp((1.3 / aspect) ** 0.5, 1, 2);
+    orbit.target.set(8, 12.5 + (f - 1) * 7, -6.5);
+    camera.position.set(8 + 49 * f, 9.5 + (f - 1) * 3, -6.5 + 38.5 * f);
+  }
+  exteriorView();
   orbit.enableDamping = true; orbit.dampingFactor = 0.08;
   orbit.maxPolarAngle = Math.PI * 0.495;
   orbit.minDistance = 2; orbit.maxDistance = 220;
@@ -142,6 +149,14 @@ async function main() {
   // ------------------------------------------------------------ state
   const state = { mode: 'exterior', level: '1F', selected: null, goalMode: false, follow: false, robotCam: true, mmLayer: 'truth' };
 
+  // Smartphones (touch screen up to landscape-phone width): only the 3D building — no side panel,
+  // map / SLAM window, HUD or robot-camera inset.
+  const phoneQuery = window.matchMedia('(pointer: coarse) and (max-width: 932px), (max-width: 600px)');
+  const isPhone = () => phoneQuery.matches;
+  const applyPhone = () => document.body.classList.toggle('phone', isPhone());
+  applyPhone();
+  phoneQuery.addEventListener('change', applyPhone);
+
   function toast(msg, ms = 2200) {
     const t = $('toast'); t.textContent = msg; t.classList.add('show');
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms);
@@ -168,7 +183,7 @@ async function main() {
       if (prev === 'exterior' || prev === 'walk' || off.length() > 80) off.set(-14, 26, 22);
       orbit.target.copy(tgt); camera.position.copy(tgt).add(off);
     } else if (mode === 'exterior' && prev === 'walk') {
-      orbit.target.set(8, 12.5, -6.5); camera.position.set(57, 9.5, 32);
+      exteriorView();
     }
     renderRooms();
     drawMinimapBase();
@@ -636,7 +651,7 @@ async function main() {
     labelRenderer.render(scene, camera);
 
     // PiP robot camera
-    const show = state.robotCam && r && state.mode !== 'walk';
+    const show = state.robotCam && r && state.mode !== 'walk' && !isPhone();
     $('pipLabel').classList.toggle('hidden', !show);
     if (show) {
       const W = Math.min(320, window.innerWidth * 0.3), H = W * 0.75;
@@ -661,7 +676,7 @@ async function main() {
       pl.textContent = `로봇 카메라 · ${r.name}`;
     }
 
-    drawMinimap(dt);
+    if (!isPhone()) drawMinimap(dt);
     hudT -= dt;
     if (hudT <= 0) {
       hudT = 0.2;
