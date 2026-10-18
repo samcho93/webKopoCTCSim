@@ -1,0 +1,213 @@
+{
+ "robot": "ReBot_Arm_DM",
+ "source": "samcho93/studyReBotDevArm assets/robot/DM (CERN-OHL-W-2.0)",
+ "joints": [
+  {
+   "name": "joint1",
+   "type": "revolute",
+   "parent": "base_link",
+   "child": "link1",
+   "xyz": [
+    -8.416e-05,
+    0.0,
+    0.08465
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "lower": -2.8,
+   "upper": 2.8
+  },
+  {
+   "name": "joint2",
+   "type": "revolute",
+   "parent": "link1",
+   "child": "link2",
+   "xyz": [
+    0.020084,
+    0.031625,
+    0.05555
+   ],
+   "rpy": [
+    -1.5708,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "lower": -3.14,
+   "upper": 0.0
+  },
+  {
+   "name": "joint3",
+   "type": "revolute",
+   "parent": "link2",
+   "child": "link3",
+   "xyz": [
+    -0.264,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "lower": -3.14,
+   "upper": 0.0
+  },
+  {
+   "name": "joint4",
+   "type": "revolute",
+   "parent": "link3",
+   "child": "link4",
+   "xyz": [
+    0.2426,
+    -0.054,
+    -0.001625
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "lower": -1.87,
+   "upper": 1.57
+  },
+  {
+   "name": "joint5",
+   "type": "revolute",
+   "parent": "link4",
+   "child": "link5",
+   "xyz": [
+    0.078308,
+    -0.0375,
+    -0.03
+   ],
+   "rpy": [
+    -1.5708,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "lower": -1.57,
+   "upper": 1.57
+  },
+  {
+   "name": "joint6",
+   "type": "revolute",
+   "parent": "link5",
+   "child": "link6",
+   "xyz": [
+    0.028008,
+    0.0,
+    0.04
+   ],
+   "rpy": [
+    0.0,
+    1.5708,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "lower": -3.14,
+   "upper": 3.14
+  },
+  {
+   "name": "end_joint",
+   "type": "fixed",
+   "parent": "link6",
+   "child": "end_link",
+   "xyz": [
+    0.0,
+    0.0,
+    0.15539
+   ],
+   "rpy": [
+    0.0,
+    -1.5708,
+    3.1415
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "lower": 0.0,
+   "upper": 0.0
+  },
+  {
+   "name": "finger_left",
+   "type": "prismatic",
+   "parent": "end_link",
+   "child": "finger_left_link",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "lower": 0.0,
+   "upper": 0.05
+  },
+  {
+   "name": "finger_right",
+   "type": "prismatic",
+   "parent": "end_link",
+   "child": "finger_right_link",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "lower": -0.05,
+   "upper": 0.0
+  }
+ ]
+}

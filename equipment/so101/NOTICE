@@ -1,0 +1,3 @@
+SO-ARM101 (SO-101) mesh for the 308 desk arms.
+Baked by tools/build_arm.py from samcho93/studySO-ARM101 (so101_new_calib.urdf + assets/mesh/so101-meshes.bin).
+Meshes: TheRobotStudio/SO-ARM100, Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
