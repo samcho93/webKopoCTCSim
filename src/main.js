@@ -31,8 +31,15 @@ class Emitter {
   emit(e, ...a) { (this.h[e] || []).forEach((f) => f(...a)); }
 }
 
-async function loadImage(src) {
-  const img = new Image(); img.src = src; await img.decode(); return img;
+// onload rather than img.decode(): decode() can stay pending while the page is not being painted
+// (background tab / hidden pane), which stalled start-up
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`image failed: ${src}`));
+    img.src = src;
+  });
 }
 
 async function main() {
@@ -169,7 +176,7 @@ async function main() {
     if (mode !== 'walk' && prev === 'walk') exitWalk();
     building.setView(mode, mode === 'exterior' ? null : level);
     for (const [id, g] of Object.entries(labelGroups)) g.visible = (mode === 'cutaway' || mode === 'single') && id === level;
-    document.querySelectorAll('#modes button, #pbModes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+    document.querySelectorAll('#modes button, #pbModes button[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
     document.querySelectorAll('#levels button, #pbLevels button').forEach((b) => b.classList.toggle('on', b.dataset.level === level && mode !== 'exterior'));
     $('walkHelp').classList.toggle('hidden', mode !== 'walk');
     if (mode === 'walk') enterWalk(level);
@@ -376,7 +383,7 @@ async function main() {
     b.onclick = () => setMode(state.mode === 'exterior' ? 'cutaway' : state.mode, lv.id);
     wrap.appendChild(b);
   }
-  document.querySelectorAll('#modes button, #pbModes button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+  document.querySelectorAll('#modes button, #pbModes button[data-mode]').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
   function renderRooms() {
     const lv = building.byId[state.level];
     $('roomsLevel').textContent = `${lv.id} · ${lv.name} · 천장고 ${lv.ceiling.toFixed(1)}m`;
@@ -419,6 +426,17 @@ async function main() {
   };
   $('stopRobot').onclick = () => { state.selected?.cancel(); if (state.selected && state.selected.link) tikiLink.estop(); };
   $('aoOn').onchange = (e) => { useAO = e.target.checked; };
+  // labels (room names, robot tags): one switch for the panel checkbox and the phone bar button, remembered per device
+  function setLabels(on) {
+    document.body.classList.toggle('noLabels', !on);
+    $('labelsOn').checked = on; $('pbLabels').classList.toggle('on', on);
+    try { localStorage.setItem('kopo.labels', on ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+  }
+  let labelsPref = '1';
+  try { labelsPref = localStorage.getItem('kopo.labels') ?? '1'; } catch (e) { /* storage unavailable */ }
+  setLabels(labelsPref !== '0');
+  $('labelsOn').onchange = (e) => setLabels(e.target.checked);
+  $('pbLabels').onclick = () => setLabels(document.body.classList.contains('noLabels'));
   $('followCam').onchange = (e) => (state.follow = e.target.checked);
   $('robotCam').onchange = (e) => (state.robotCam = e.target.checked);
   $('showScan').onchange = (e) => sim.robots.forEach((r) => (r.scanViz.visible = e.target.checked));

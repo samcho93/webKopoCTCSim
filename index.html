@@ -30,7 +30,7 @@
           <button data-mode="walk">1인칭</button>
         </div>
         <div class="levels" id="levels"></div>
-        <div class="row" style="margin-top:8px"><label><input type="checkbox" id="aoOn" checked /> 고품질 렌더링 (AO)</label></div>
+        <div class="row" style="margin-top:8px"><label><input type="checkbox" id="aoOn" checked /> 고품질 렌더링 (AO)</label><label><input type="checkbox" id="labelsOn" checked /> 라벨 표시</label></div>
       </section>
       <section>
         <h2>공간 <small id="roomsLevel"></small></h2>
@@ -94,6 +94,7 @@
         <button data-mode="exterior" class="on">외관</button>
         <button data-mode="cutaway">층 단면</button>
         <button data-mode="single">단일 층</button>
+        <button id="pbLabels" class="on" title="방 이름·로봇 라벨 표시/숨김">라벨</button>
       </div>
       <div class="levels" id="pbLevels"></div>
     </nav>
